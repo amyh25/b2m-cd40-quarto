@@ -1,0 +1,325 @@
+---
+execute: 
+  freeze: true
+  message: false
+  warning: false
+---
+
+# Initialize Seurat Object
+
+First, we'll read run our setup script, which will define paths and load in the necessary libraries. 
+
+```{r}
+library(here)
+source(here("lib", "setup.R"))
+source(here("lib", "helper.R"))
+source(here("lib", "helper_Seurat.R"))
+source(here("lib", "aesthetics.R"))
+```
+
+## Read in data
+
+```{r}
+seq1_data_list <- list.files(seq1_dir) %>%
+  set_names() %>%
+  map( ~ Seurat::Read10X(
+    file.path(seq1_dir, ..1, "outs", "filtered_feature_bc_matrix")
+  ))
+names(seq1_data_list) <- paste0("seq1_", names(seq1_data_list))
+
+seq2_data_list <- list.files(seq2_dir) %>%
+  set_names() %>%
+  map( ~ Seurat::Read10X(
+    file.path(seq2_dir, ..1, "outs", "filtered_feature_bc_matrix")
+  ))
+names(seq2_data_list) <- paste0("seq2_", names(seq2_data_list))
+
+data_list <- c(seq1_data_list, seq2_data_list)
+
+so_list <- data_list %>%
+  imap(~ Seurat::CreateSeuratObject(..1$`Gene Expression`, project = ..2)) %>%
+  map(run_seurat_rna_workflow,
+      run_scale = FALSE,
+      run_clustering = FALSE)
+
+so_list <- map2(
+  so_list, data_list,
+  function(so, data) {
+    so[["HTO"]] <- CreateAssayObject(counts = data$`Antibody Capture`)
+    so <-
+      NormalizeData(so, assay = "HTO", normalization.method = "CLR")
+    return(so)
+  })
+```
+
+## HTO demultiplexing
+
+### Explore
+
+```{r}
+hto_tidy_list <- so_list %>% map(get_hto_tidy)
+hto_df_list <- hto_tidy_list %>% map(~..1 %>% pivot_wider(id_cols = cell, names_from = hashtag))
+```
+
+At a glance, you can see that the quality of the hashtag binding varied across sample, and that it's particularly bad in sample d1 from the first sequencing run. 
+
+```{r, fig.asp = 1/2, fig.width = 14}
+cowplot::plot_grid(plotlist = imap(hto_tidy_list, ~plot_hto_ridges(..1) + ggtitle(..2)), ncol = 4)
+```
+
+```{r, fig.asp = 1/2, fig.width = 14}
+hto_df_list %>% 
+    imap(~plot_hto_density(..1) + ggtitle(..2)) %>% 
+    cowplot::plot_grid(plotlist = ., ncol = 4)
+```
+
+```{r, fig.asp = 1}
+plot_grid(
+    plot_hto_density(
+        hto_df_list$seq1_sample_a1,
+        x = hashtag1,
+        y = hashtag3
+    ) + ggtitle("a1"),
+    plot_hto_density(
+        hto_df_list$seq1_sample_a1,
+        x = hashtag2,
+        y = hashtag3
+    ) + ggtitle("a1"),
+    plot_hto_density(
+        hto_df_list$seq1_sample_d1,
+        x = hashtag1,
+        y = hashtag3
+    ) + ggtitle("d1"),
+    plot_hto_density(
+        hto_df_list$seq1_sample_d1,
+        x = hashtag2,
+        y = hashtag3
+    ) + ggtitle("d1"),
+    ncol = 2
+)
+```
+
+### Clustering HTO
+
+I'm going to use K-medoid (aka PAM) clustering. Seurat (as of 2022-01-11, see https://satijalab.org/seurat/articles/hashing_vignette.html) uses Clara, which is a faster implementation of K-medoid clustering. It's also implemented in the `cluster` package so I use it here. 
+
+```{r}
+# this step may take a while to compute
+so_list <- map(so_list, run_seurat_hto_clustering)
+```
+
+```{r}
+hto_df_list_ann <- map2(hto_df_list,
+     so_list,
+     ~ ..1 %>%
+         left_join(as_tibble(..2@meta.data, rownames = "cell"),
+                   by = "cell"))
+```
+
+```{r, fig.asp = 1/2, fig.width = 14}
+hto_df_list_ann %>% 
+    imap(~plot_hto_density(..1, group_str = "hash.ID") + ggtitle(..2)) %>% 
+    cowplot::plot_grid(plotlist = ., ncol = 4)
+```
+
+
+```{r, fig.asp = 1}
+plot_grid(
+    plot_hto_density(
+        hto_df_list_ann$seq1_sample_a1,
+        x = hashtag1,
+        y = hashtag3, group_str = "hash.ID"
+    ) + ggtitle("a1"),
+    plot_hto_density(
+        hto_df_list_ann$seq1_sample_a1,
+        x = hashtag2,
+        y = hashtag3, group_str = "hash.ID"
+    ) + ggtitle("a1"),
+    plot_hto_density(
+        hto_df_list_ann$seq1_sample_d1,
+        x = hashtag1,
+        y = hashtag3, group_str = "hash.ID"
+    ) + ggtitle("d1"),
+    plot_hto_density(
+        hto_df_list_ann$seq1_sample_d1,
+        x = hashtag2,
+        y = hashtag3, group_str = "hash.ID"
+    ) + ggtitle("d1"),
+    ncol = 2
+)
+```
+
+### Manually determining Sample C1
+
+```{r}
+t1 <- 0.6
+t2 <- 0.57
+plot_grid(
+    hto_df_list$seq1_sample_c1 %>% plot_hto_density() + 
+        geom_abline(intercept = 0, slope = t1),
+    hto_df_list$seq2_sample_c1 %>% plot_hto_density() + 
+        geom_abline(intercept = 0, slope = t2)
+)
+```
+
+
+```{r}
+plot_grid(
+    hto_df_list$seq1_sample_c1 %>% 
+        mutate(hash.ID = ifelse(hashtag2 > hashtag1*t1, "hashtag2", "hashtag1")) %>% 
+        plot_hto_density(group_str = "hash.ID", limit = 2, bins = 20),
+    hto_df_list$seq2_sample_c1 %>% 
+        mutate(hash.ID = ifelse(hashtag2 > hashtag1*t2, "hashtag2", "hashtag1")) %>% 
+        plot_hto_density(group_str = "hash.ID", limit = 2, bins = 20)
+)
+```
+
+```{r}
+hto_metadata_s1_c1 <- hto_df_list$seq1_sample_c1 %>%
+    mutate(hash.ID = ifelse(hashtag2 > hashtag1 * t1, "hashtag2", "hashtag1")) %>% 
+    column_to_rownames("cell") %>% 
+    select(hash.ID) 
+so_list$seq1_sample_c1 <- Seurat::AddMetaData(so_list$seq1_sample_c1, 
+                                              metadata = hto_metadata_s1_c1)
+
+hto_metadata_s2_c1 <- hto_df_list$seq2_sample_c1 %>%
+    mutate(hash.ID = ifelse(hashtag2 > hashtag1 * t2, "hashtag2", "hashtag1"))  %>%
+    column_to_rownames("cell") %>%
+    select(hash.ID) 
+so_list$seq2_sample_c1 <- Seurat::AddMetaData(so_list$seq2_sample_c1, 
+                                              metadata = hto_metadata_s2_c1)
+```
+
+### Evaluation of demultiplexing
+
+```{r}
+hto_df_ann <- map2_dfr(hto_df_list,
+                       so_list,
+                       ~ ..1 %>%
+                           left_join(as_tibble(..2@meta.data, rownames = "cell"),
+                                     by = "cell"),
+                       .id = "sample")
+```
+
+```{r}
+hto_df_ann %>% 
+    group_by(sample, hash.ID) %>% 
+    summarise(across(starts_with("hashtag"), mean)) %>% 
+    pivot_longer(cols = str_subset(colnames(.), "hashtag"), 
+                 names_to = "hashtag") %>% 
+    ungroup() %>% 
+    separate(sample, into = c("sequencing", "sample"), extra = "merge", sep = "_") %>% 
+    mutate(sample = str_extract(sample, "sample_.")) %>% 
+    ggplot() + 
+    aes(hash.ID, hashtag, fill = value) + 
+    geom_tile() + 
+    facet_grid(sequencing~sample) + 
+    coord_fixed() + 
+    labs(fill = "Mean expr.", x = "Identity", y = "Expression") + 
+    scale_fill_viridis(na.value = "white") + 
+    theme(axis.text.x = element_text(angle = 45, hjust = 1), 
+          axis.line = element_blank(), 
+          axis.ticks = element_blank())
+```
+
+## Set up Seurat Object
+
+```{r}
+so <- merge(so_list[[1]], so_list[2:length(so_list)], 
+            add.cell.ids = names(so_list))
+```
+
+So many cells!
+
+```{r}
+new_metadata <- so@meta.data %>%
+    dplyr::select(orig.ident, hash.ID) %>%
+    tidyr::separate(
+        orig.ident,
+        into = c("seq", "sample"),
+        sep = "_",
+        extra = "merge"
+    ) %>% 
+    mutate(mouse = paste0(sample, "__", hash.ID))
+so <- AddMetaData(so, metadata = new_metadata)
+```
+
+```{r}
+new_metadata <- so@meta.data %>%
+    dplyr::select(sample) %>% 
+    mutate(genotype = case_when(
+        sample %>% startsWith("sample_a") ~ "Ctrl", 
+        sample %>% startsWith("sample_c") ~ "Ctrl", 
+        TRUE ~ "B2m KO"
+    )) %>% 
+    mutate(treatment = case_when(
+        sample %>% startsWith("sample_a") ~ "Isotype", 
+        sample %>% startsWith("sample_d") ~ "Isotype", 
+        TRUE ~ "CD40 agonist"
+    )) %>% 
+    mutate(group = paste0(genotype, "__", treatment)) %>% 
+    mutate(group = factor(group, levels = c("Ctrl__Isotype", "Ctrl__CD40 agonist", 
+                                            "B2m KO__Isotype", "B2m KO__CD40 agonist")))
+so <- AddMetaData(so, metadata = new_metadata)
+```
+
+## Run Clustering Workflow with no filters
+
+```{r}
+Idents(so) <- "sample"
+VlnPlot(
+    so,
+    features = c("nCount_RNA",  "nFeature_RNA", "percent.mt"),
+    pt.size = 0
+)
+```
+
+```{r}
+so <- run_seurat_rna_workflow(so)
+```
+
+```{r}
+saveRDS(so, file.path(results_dir, "so_raw.rds"))
+```
+
+## Filter low quality cells
+
+```{r}
+so_filtered <- subset(so, subset = nFeature_RNA > 200 & percent.mt < 10)
+```
+
+```{r}
+Idents(so_filtered) <- "sample"
+VlnPlot(
+    so_filtered,
+    features = c("nCount_RNA",  "nFeature_RNA", "percent.mt"),
+    pt.size = 0
+)
+```
+
+Filtered out this many cells: 
+
+```{r}
+ncol(so) - ncol(so_filtered)
+```
+
+This many cells remaining: 
+
+```{r}
+ncol(so_filtered)
+```
+
+```{r}
+so_filtered <- run_seurat_rna_workflow(so_filtered)
+```
+
+```{r}
+saveRDS(so_filtered, file.path(results_dir, "so_filterRNA200mito10.rds"))
+```
+
+# END
+
+```{r}
+sessionInfo()
+```
+

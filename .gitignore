@@ -4,6 +4,7 @@ previous_books
 _book
 data/*
 results
+.quarto
 
 # Created by https://www.toptal.com/developers/gitignore/api/macos,vim,r,jupyternotebooks,python
 # Edit at https://www.toptal.com/developers/gitignore?templates=macos,vim,r,jupyternotebooks,python

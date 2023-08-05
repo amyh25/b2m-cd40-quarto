@@ -1,0 +1,241 @@
+---
+execute: 
+  freeze: true
+  message: false
+  warning: false
+---
+
+```{r}
+library(here)
+source(here("lib", "setup.R"))
+source(here("lib", "helper_Seurat.R"))
+source(here("lib", "helper.R"))
+source(here("lib", "aesthetics.R"))
+```
+
+```{r}
+so_T <- readRDS(file.path(results_dir, "so_filterRNA200mito10_subsetT.rds"))
+```
+
+```{r}
+get_metadata_from_so(so_T) %>% plot_umap(color_str = "clusters_T", label = TRUE) 
+```
+
+# Remove doublets
+
+```{r}
+clusters_to_keep <- so_T@meta.data$clusters_T %>% unique() %>% .[-6]
+so <- subset(so_T %>% set_idents("clusters_T"), ident = clusters_to_keep)
+```
+
+```{r}
+get_metadata_from_so(so) %>% plot_umap(color_str = "nFeature_RNA") 
+```
+
+# Rerun Seurat workflow
+
+```{r}
+so <- run_seurat_rna_workflow(so)
+```
+
+# Clustering 
+
+```{r}
+for (res in seq(0.2, 0.8, 0.1)) {
+    so <- FindClusters(so, resolution = res)
+}
+```
+
+```{r, fig.asp = 1, fig.width = 7}
+clustree::clustree(so, prefix = "RNA_snn_res.")
+```
+
+```{r, fig.asp = 1, fig.width = 7}
+get_metadata_from_so(so) %>% 
+    dplyr::select(cell, UMAP_1, UMAP_2, all_of(str_subset(colnames(.), "RNA_snn_res."))) %>% 
+    pivot_longer(cols = all_of(str_subset(colnames(.), "RNA_snn_res.")), 
+                 names_to = "clustering", 
+                 values_to = "cluster") %>% 
+    plot_umap(color_str = "cluster", label = TRUE, label_groups = "clustering") + 
+    facet_wrap(~clustering, ncol = 3)
+```
+
+# Identify differential markers 
+
+```{r}
+markers04_df <- run_or_readRDS(
+    file.path(
+        results_dir, 
+        "so_filterRNA200mito10_subsetTremovedoublets_markers04.rds"
+    ), 
+    function() {FindAllMarkers(so %>% set_idents("RNA_snn_res.0.4"))}
+)
+write_csv(markers04_df, file.path(results_dir, "so_filterRNA200mito10_subsetTremovedoublets_markers04.csv"))
+```
+
+```{r}
+markers09_df <- run_or_readRDS(
+    file.path(
+        results_dir, 
+        "so_filterRNA200mito10_subsetTremovedoublets_markers09.rds"
+    ), 
+    function() {FindAllMarkers(so %>% set_idents("RNA_snn_res.0.9"))}
+)
+write_csv(markers09_df, file.path(results_dir, "so_filterRNA200mito10_subsetTremovedoublets_markers09.csv"))
+```
+
+# Assign clusters
+
+```{r}
+cluster_ann_df <- readxl::read_excel(file.path(results_dir, "cluster_annotations.xlsx")) %>% 
+    tidyr::fill(Subset, clustering) %>% 
+    filter(Subset == "so_filterRNA200mito10_subsetTremovedoublets.rds") %>% 
+    filter(clustering == "RNA_snn_res.0.4") %>% 
+    mutate(cluster_ID_name = paste0(cluster, ": ", cluster_ID))
+
+cluster_key <-
+    cluster_ann_df$cluster_ID_name %>% set_names(cluster_ann_df$cluster)
+cluster_grouped_key <-
+    cluster_ann_df$cluster_ID_grouped %>% set_names(cluster_ann_df$cluster)
+
+palette_cluster <- cluster_ann_df$color %>% set_names(cluster_ann_df$cluster_ID_name)
+
+cluster_ID_name_ordered <- cluster_ann_df %>% 
+    arrange(cluster_ID_grouped) %>% 
+    .$cluster_ID_name
+```
+
+```{r}
+cell_type_metadata <- get_metadata_from_so(so, metadata = "RNA_snn_res.0.4", reduction = NULL) %>%
+    mutate(clusters_T = cluster_key[as.character(RNA_snn_res.0.4)]) %>% 
+    mutate(clusters_T = factor(clusters_T, levels = cluster_ID_name_ordered)) %>% 
+    mutate(general_T_subtypes = cluster_grouped_key[as.character(RNA_snn_res.0.4)]) %>% 
+    select(-RNA_snn_res.0.4) %>% 
+    column_to_rownames("cell")
+so <- AddMetaData(so, metadata = cell_type_metadata)
+```
+
+```{r}
+get_metadata_from_so(so, metadata = "clusters_T") %>% 
+    plot_umap(color_str = "clusters_T", label = TRUE, pointsize = 0.5, 
+              repel_min_segment_length = 0.1) + 
+    theme(legend.position = "none") + 
+    scale_color_manual(values = palette_cluster)
+```
+
+# Dot plot marker
+
+```{r}
+genes <- c(
+    "Cd44", # 11/8 meeting with Brian, he suggested adding it
+    "Cd4", "Cxcr6", "Icos", # Cd4
+    "Cd8a", "Cd3e", #"Ccl5", # Ccl5-high
+    "Gzmk", "Tox", # Gzmk high
+    "Pdcd1", "Havcr2", "Lag3", # Exh
+    "Il1rl1", "Gata3", # ILC2 
+    "Trdc", # gdT
+    "Ifit1", "Isg15", # IFN-sensing
+    "Sell", "Il7r", "Tcf7", # Naive
+    "Klra4", "Klre1", # NK
+    "Mki67", "Stmn1",  # Prolif
+    "Ikzf2", "Foxp3", "Ctla4" # tregs
+)
+
+dotplot_df <-
+    get_metadata_from_so(so,
+                         metadata = "clusters_T",
+                         genes = genes,
+                         reduction = NULL) %>%
+    pivot_longer(cols = 3:ncol(.),
+                 names_to = "gene",
+                 values_to = "expr") %>%
+    mutate(clusters_T = factor(clusters_T, levels = rev(cluster_ID_name_ordered))) %>% 
+    mutate(gene = factor(gene, levels = genes)) %>% 
+    group_by(gene) %>%
+    mutate(scaled_expr = as.vector(scale(expr))) %>%
+    group_by(clusters_T, gene) %>%
+    summarise(mean_scaled_expr = mean(expr)) %>%
+    mutate(
+        color = palette_cluster[as.character(clusters_T)], 
+        name = glue::glue("<i style='color:{color}'>{clusters_T}</i>")
+    ) %>% 
+    mutate(name = fct_reorder(name, as.integer(clusters_T)))
+dotplot_df %>% 
+    ggplot() +
+    aes(gene, name) +
+    geom_point(aes(size = mean_scaled_expr, color = mean_scaled_expr)) + 
+    labs(caption = "color and size are scaled mean expression; cell types not shown in any particular order here") + 
+    scale_color_viridis(limits = c(NA, 3) ,oob = scales::squish) + 
+    remove_spines() + 
+    theme(panel.background = element_rect(color = "black"), 
+          axis.title = element_blank(), 
+          legend.position = "none", 
+          axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5), 
+          axis.text.y = ggtext::element_markdown())
+```
+
+# How are our groups distributed
+
+## stackedbar
+
+```{r, fig.asp = 2, fig.width = 3}
+get_metadata_from_so(so) %>% 
+    calculate_proportion(clusters_T, group) %>% 
+    mutate(clusters = factor(clusters_T, levels = cluster_ID_name_ordered)) %>% 
+    plot_proportion() + 
+    labs(y = "Frequency of Lymphoid") + 
+    scale_fill_manual(values = palette_cluster) 
+```
+
+
+```{r, fig.asp = 1, fig.width = 7}
+mouse_group_key_df <- get_metadata_from_so(so) %>% 
+    dplyr::select(mouse, group) %>% 
+    unique()
+get_metadata_from_so(so) %>% 
+    calculate_proportion(clusters_T, mouse) %>% 
+    left_join(mouse_group_key_df, by = "mouse") %>% 
+    mutate(clusters = factor(clusters_T, levels = cluster_ID_name_ordered)) %>% 
+    plot_proportion(x = mouse) + 
+    facet_wrap(~group, scale = "free_x", ncol = 4) + 
+    theme(axis.text.x = element_blank()) +
+    remove_x_spine() + 
+    labs(y = "Frequency of Lymphoid") + 
+    scale_fill_manual(values = palette_cluster) 
+```
+
+# Visualize specific markers
+
+```{r}
+genes <- c("Cd8a", "Cd3e", "Cd3d", "Lyz2", "Nkg7", "Trbc2")
+get_metadata_from_so(so, genes = genes) %>% 
+    pivot_longer(cols = all_of(genes)) %>% 
+    plot_umap(pointsize = 1.1) + 
+    facet_wrap(~name)
+```
+
+# export ifng for Brian 
+
+```{r}
+mean_ifng_df <- get_metadata_from_so(so, genes = "Ifng") %>% 
+    group_by(mouse, genotype, treatment, clusters_T) %>% 
+    summarise(mean_ifng = mean(Ifng))
+write_tsv(
+    mean_ifng_df, 
+    file.path(
+        results_dir,
+        "so_filterRNA200mito10_subsetTremovedoublets__mean_ifng_df.tsv"
+    )
+)
+```
+
+# END
+
+```{r save}
+saveRDS(so, file.path(results_dir, "so_filterRNA200mito10_subsetTremovedoublets.rds"))
+```
+
+```{r}
+sessionInfo()
+```
+

@@ -1,0 +1,378 @@
+---
+title: "NK cells"
+execute: 
+  freeze: true
+  message: false
+  warning: false
+---
+
+```{r setup, include=FALSE}
+library(here)
+source(here("lib", "setup.R"))
+source(here("lib", "helper_Seurat.R"))
+source(here("lib", "helper.R"))
+source(here("lib", "aesthetics.R"))
+```
+
+```{r}
+so_T <- readRDS(
+    file.path(results_dir, "so_filterRNA200mito10_subsetTremovedoublets.rds")
+)
+```
+
+```{r}
+get_metadata_from_so(so_T) %>% plot_umap(color_str = "clusters_T", label = TRUE) 
+```
+
+```{r}
+get_metadata_from_so(so_T) %>% 
+    plot_umap(color_str = "orig.ident")
+get_metadata_from_so(so_T) %>% 
+    filter(clusters_T == "3: NK cells") %>% 
+    plot_umap(color_str = "orig.ident")
+```
+
+
+# Select NK cells
+
+```{r}
+so <- subset(so_T %>% set_idents("clusters_T"), ident = "3: NK cells")
+```
+
+```{r}
+get_metadata_from_so(so) %>% plot_umap(color_str = "nFeature_RNA") 
+```
+
+## Rerun Seurat workflow
+
+```{r}
+so <- run_seurat_rna_workflow(so)
+```
+
+## Clustering 
+
+```{r}
+for (res in seq(0.2, 0.8, 0.1)) {
+    so <- FindClusters(so, resolution = res)
+}
+```
+
+```{r, fig.asp = 1, fig.width = 7}
+clustree::clustree(so, prefix = "RNA_snn_res.")
+```
+
+```{r, fig.asp = 1, fig.width = 7}
+get_metadata_from_so(so) %>% 
+    dplyr::select(cell, UMAP_1, UMAP_2, all_of(str_subset(colnames(.), "RNA_snn_res."))) %>% 
+    pivot_longer(cols = all_of(str_subset(colnames(.), "RNA_snn_res.")), 
+                 names_to = "clustering", 
+                 values_to = "cluster") %>% 
+    plot_umap(color_str = "cluster", label = TRUE, label_groups = "clustering", 
+              pointsize = 4.1) + 
+    facet_wrap(~clustering, ncol = 3)
+```
+
+```{r}
+get_metadata_from_so(so) %>%
+    plot_umap(color_str = "treatment",
+              pointsize = 4.1) +
+    facet_wrap( ~ genotype, ncol = 3)
+get_metadata_from_so(so, genes = "Stmn1") %>%
+    plot_umap(color_str = "Stmn1",
+              pointsize = 4.1) +
+    facet_wrap( ~ genotype, ncol = 3)
+get_metadata_from_so(so, genes = "Cd3e") %>%
+    plot_umap(color_str = "Cd3e",
+              pointsize = 4.1) +
+    facet_wrap( ~ genotype, ncol = 3)
+get_metadata_from_so(so, genes = "Trdc") %>%
+    plot_umap(color_str = "Trdc",
+              pointsize = 4.1) +
+    facet_wrap( ~ genotype, ncol = 3)
+```
+
+There's a proliferating cluster that seems to emerge around resolution 0.7, so let's pick that. 
+
+```{r}
+get_metadata_from_so(so, genes = "Stmn1") %>%
+    plot_umap(color_str = "Stmn1",
+              pointsize = 4.1) +
+    facet_wrap( ~ genotype, ncol = 3)
+```
+
+## Identify differential markers 
+
+```{r}
+markers07_df <- run_or_readRDS(
+    file.path(
+        results_dir, 
+        "so_filterRNA200mito10_subsetTremovedoublets_subsetNK_markers07.rds"
+    ), 
+    function() {FindAllMarkers(so %>% set_idents("RNA_snn_res.0.7"))}
+)
+# write_csv(markers07_df, file.path(results_dir, "so_filterRNA200mito10_subsetTremovedoublets_subsetNK_markers07.csv"))
+```
+
+```{r}
+markers07_df %>% 
+    group_by(cluster) %>% 
+    arrange(p_val) %>% 
+    mutate(rank = row_number()) %>% 
+    pivot_wider(id_cols = rank, 
+                names_from = cluster, 
+                values_from = gene) %>% 
+    .[c("rank", 0:8)]
+```
+
+```{r}
+get_metadata_from_so(so) %>% 
+    plot_umap(color_str = "RNA_snn_res.0.7", pointsize = 3.1)
+get_metadata_from_so(so) %>% 
+    plot_umap(color_str = "orig.ident", pointsize = 3.1) + 
+    facet_grid(genotype~treatment)
+```
+
+# Removing CD3+ cells
+
+There are several CD3+ cells, which cannot be NK cells. Let's remove them and recluster. 
+
+```{r}
+so_dropCD3 <-
+    subset(
+        so %>% set_idents("RNA_snn_res.0.7"),
+        idents = c("3", "4"),
+        invert = T
+    )
+```
+
+```{r}
+get_metadata_from_so(so_dropCD3) %>%
+    plot_umap(color_str = "nFeature_RNA",
+              pointsize = 3.1) 
+```
+
+## shift varnames
+
+```{r}
+so_NK.only <- so
+so <- so_dropCD3
+```
+
+
+## Rerun Seurat Workflow
+
+```{r}
+so <- run_seurat_rna_workflow(so)
+```
+
+
+## Clustering 
+
+```{r}
+for (res in seq(0.2, 0.8, 0.1)) {
+    so <- FindClusters(so, resolution = res)
+}
+```
+
+```{r, fig.asp = 1, fig.width = 7}
+clustree::clustree(so, prefix = "RNA_snn_res.")
+```
+
+```{r, fig.asp = 1, fig.width = 7}
+get_metadata_from_so(so) %>% 
+    dplyr::select(cell, UMAP_1, UMAP_2, all_of(str_subset(colnames(.), "RNA_snn_res."))) %>% 
+    pivot_longer(cols = all_of(str_subset(colnames(.), "RNA_snn_res.")), 
+                 names_to = "clustering", 
+                 values_to = "cluster") %>% 
+    plot_umap(color_str = "cluster", label = TRUE, label_groups = "clustering", 
+              pointsize = 4.1) + 
+    facet_wrap(~clustering, ncol = 3)
+```
+
+```{r}
+get_metadata_from_so(so) %>%
+    plot_umap(color_str = "treatment",
+              pointsize = 4.1) +
+    facet_wrap( ~ genotype, ncol = 3)
+get_metadata_from_so(so, genes = "Stmn1") %>%
+    plot_umap(color_str = "Stmn1",
+              pointsize = 4.1) 
+get_metadata_from_so(so, genes = "Cd3e") %>%
+    plot_umap(color_str = "Cd3e",
+              pointsize = 4.1) 
+get_metadata_from_so(so, genes = "Trdc") %>%
+    plot_umap(color_str = "Trdc",
+              pointsize = 4.1) 
+```
+
+## Identify differential markers 
+
+```{r}
+markers04_df <- run_or_readRDS(
+    file.path(
+        results_dir, 
+        "so_filterRNA200mito10_subsetTremovedoublets_subsetNKdropCD3_markers04.rds"
+    ), 
+    function() {FindAllMarkers(so %>% set_idents("RNA_snn_res.0.4"))}
+)
+```
+
+```{r}
+markers04_df %>% 
+    group_by(cluster) %>% 
+    arrange(p_val) %>% 
+    mutate(rank = row_number()) %>% 
+    pivot_wider(id_cols = rank, 
+                names_from = cluster, 
+                values_from = gene) %>% 
+    .[c("rank", 0:3)]
+```
+
+```{r}
+get_metadata_from_so(so) %>% 
+    plot_umap(color_str = "RNA_snn_res.0.4", pointsize = 3.1)
+get_metadata_from_so(so) %>% 
+    plot_umap(color_str = "orig.ident", pointsize = 3.1) + 
+    facet_grid(genotype~treatment)
+```
+
+## DGE CD40 vs Isotype
+
+```{r}
+so_b2m <- subset(so %>% set_idents("genotype"), idents = "B2m KO")
+so_wt <- subset(so %>% set_idents("genotype"), idents = "Ctrl")
+dge_cd40.v.wt_list <- run_or_readRDS(
+    file.path(
+        results_dir, 
+        "DGE_filterRNA200mito10_subsetTremovedoublets_subsetNK_cd40.v.WT.rds"
+    ), 
+    function() {
+        list(
+            b2m = FindMarkers(so_b2m %>% set_idents("treatment"), 
+                             ident.1 = "CD40 agonist", 
+                             ident.2 = "Isotype"), 
+            wt = FindMarkers(so_wt %>% set_idents("treatment"), 
+                             ident.1 = "CD40 agonist", 
+                             ident.2 = "Isotype")
+        )
+    }
+)
+dge_cd40.v.wt_df <- bind_rows(
+    dge_cd40.v.wt_list$wt %>% as_tibble(rownames = "gene") %>% mutate(genotype = "WT"), 
+    dge_cd40.v.wt_list$b2m %>% as_tibble(rownames = "gene") %>% mutate(genotype = "B2m KO")
+)
+```
+
+```{r}
+dge_cd40.v.wt_list$wt %>% 
+    filter(avg_log2FC > 0) %>% 
+    arrange(p_val)
+dge_cd40.v.wt_list$wt %>% 
+    filter(avg_log2FC < 0) %>% 
+    arrange(p_val)
+```
+
+
+```{r}
+p_scatter <- dge_cd40.v.wt_df %>% 
+    mutate(signed_p = ifelse(avg_log2FC > 0, -log10(p_val), log10(p_val))) %>% 
+    pivot_wider(id_cols = gene, 
+                names_from = genotype, 
+                values_from = signed_p, 
+                values_fill = NA) %>% 
+    ggplot() + 
+    aes(WT, `B2m KO`, label = gene) + 
+    geom_point(size = 0.5) + 
+    annotate("rect", xmin = -Inf, xmax = 0, ymin = 0, ymax = Inf, 
+             alpha = 0.5) + 
+    annotate("rect", xmin = 0, xmax = Inf, ymin = -Inf, ymax = 0, 
+             alpha = 0.5) + 
+    coord_fixed()
+p_scatter
+```
+
+```{r}
+library(plotly)
+ggplotly(p_scatter)
+```
+
+Using the `ggplotly` function to investigate this scatter plot interactively, I see that a lot of the genes which associate differentially with CD40 in WT or B2m KO are actually ribosomal genes, so maybe that's just due to noise. Let's consider only genes which are enriched in both. 
+
+```{r}
+dge_cd40.v.wt_df %>% 
+    filter(p_val_adj < 0.05) %>% 
+    pivot_wider(id_cols = gene, 
+                names_from = genotype, 
+                values_from = c(p_val, avg_log2FC)) %>% 
+    filter(avg_log2FC_WT * `avg_log2FC_B2m KO` > 0) %>% 
+    mutate(direction = ifelse(`avg_log2FC_B2m KO` > 0, "CD40", "isotype")) %>% 
+    group_by(direction) %>% 
+    slice_max(abs(`avg_log2FC_B2m KO`), n = 20) %>% 
+    ungroup() %>% 
+    mutate(gene = fct_reorder(gene, `avg_log2FC_B2m KO`)) %>% 
+    ggplot() + 
+    aes(gene, `avg_log2FC_B2m KO`) + 
+    geom_segment(aes(xend = fct_reorder(gene, `avg_log2FC_B2m KO`), 
+                     y = 0, yend = `avg_log2FC_B2m KO`)) + 
+    geom_text(aes(label = gene, y = 0), hjust = 1.1, size = 3, angle = 90, 
+              data = ~..1 %>% filter(`avg_log2FC_B2m KO` > 0)) + 
+    geom_text(aes(label = gene, y = 0), hjust = -0.1, size = 3, angle = 90,
+              data = ~..1 %>% filter(`avg_log2FC_B2m KO` < 0)) + 
+    geom_point(aes(size = -log10(`p_val_B2m KO`))) + 
+    theme(axis.text.x = element_blank(), 
+          axis.ticks.x = element_blank(), 
+          axis.line.x = element_blank())
+```
+
+```{r}
+get_metadata_from_so(so, genes = c("Ifng", "Ifngr1")) %>% 
+    plot_violin(group = treatment, var = Ifng) + 
+    facet_grid(~genotype) + 
+    stat_compare_means(comparison = list(c("Isotype", "CD40 agonist")), 
+                       vjust = 2)
+get_metadata_from_so(so, genes = c("Ifng", "Ifngr1")) %>% 
+    plot_violin(group = treatment, var = Ifngr1) + 
+    facet_grid(~genotype) + 
+    stat_compare_means(comparison = list(c("Isotype", "CD40 agonist")), 
+                       vjust = 2)
+```
+
+```{r}
+get_metadata_from_so(so, genes = c("Ifng", "Ifngr1")) %>% 
+    group_by(mouse, treatment, genotype) %>% 
+    summarise(mean_ifng = mean(Ifng)) %>% 
+    plot_violin(group = treatment, var = mean_ifng) + 
+    geom_point() + 
+    facet_grid(~genotype) + 
+    stat_compare_means(comparison = list(c("Isotype", "CD40 agonist")), 
+                       vjust = 2)
+```
+
+```{r}
+get_metadata_from_so(so, genes = c("Ifng", "Ifngr1")) %>% 
+    group_by(mouse, treatment, genotype) %>% 
+    summarise(mean_ifngr1 = mean(Ifngr1)) %>% 
+    plot_violin(group = treatment, var = mean_ifngr1) + 
+    geom_point() + 
+    facet_grid(~genotype) + 
+    stat_compare_means(comparison = list(c("Isotype", "CD40 agonist")), 
+                       vjust = 2)
+```
+
+
+# END
+
+```{r save}
+# so_NK.only <- readRDS(file.path(results_dir, "so_filterRNA200mito10_subsetTremovedoublets_subsetNK.rds"))
+saveRDS(so_NK.only, file.path(results_dir, "so_filterRNA200mito10_subsetTremovedoublets_subsetNK.rds"))
+
+# so <- readRDS(file.path(results_dir, "so_filterRNA200mito10_subsetTremovedoublets_subsetNKdropCD3.rds"))
+saveRDS(so, file.path(results_dir, "so_filterRNA200mito10_subsetTremovedoublets_subsetNKdropCD3.rds"))
+```
+
+```{r}
+sessionInfo()
+```
+
+
+

@@ -1,0 +1,94 @@
+# Set up
+
+This section will describe all set up instructions required to run the single cell analyses.  
+
+```{r}
+#| echo: false
+#| warning: false
+#| message: false
+
+library(tidyverse)
+library(msigdbr)
+library(here)
+```
+
+
+## Data
+
+To run the analyses, you will first need to download the source data. The data can be found at two locations: NCBI GEO repository and the Broad Institute's Single Cell Portal.  
+
+## More Data
+
+We'll also be using some signatures from the Molecular Signatures Database. We'll generate that here.
+
+```{r}
+#| cache: true
+
+h_df <- msigdbr::msigdbr(species = "Mus musculus", category = "H")
+h_df %>%
+    group_by(gs_name) %>%
+    mutate(rank = row_number()) %>%
+    pivot_wider(id_cols = gs_name,
+                names_from = rank,
+                values_from = gene_symbol,
+                values_fill = "") %>%
+    write_tsv(here("data", "signatures", "h_mouse.gmt"),
+              col_names = NA)
+```
+
+
+## Paths
+
+For the entirety of the single cell analysis, we'll use the following path variables and definitions, which will be called by sourcing the `setup.R` script in `lib/`
+
+```{r}
+#| message: false
+
+data_dir <- here("data")
+seq1_dir <- file.path(data_dir, "cellranger_output_seq1")
+seq2_dir <- file.path(data_dir, "cellranger_output_seq2")
+```
+
+
+## Mouse-Human gene homologs
+
+For some signature analyses, we'll need to convert between human and mouse homologs easily. I don't want to have to access the biomaRt servers constantly, so let's just download a data frame with the conversions. 
+
+```{r}
+#| cache: true
+#| warning: false
+#| message: false
+
+library(here)
+library(biomaRt)
+source(here("lib", "helper.R"))
+
+mouse_human_df <- run_or_readRDS(
+  here("data", "mouse_human_genes.rds"),
+  function() {
+    so <- readRDS(here("results", "so_filterRNA200mito10.rds"))
+    
+    hmart <-
+      useMart("ensembl",
+              dataset = "hsapiens_gene_ensembl",
+              host = "https://dec2021.archive.ensembl.org/")
+    mmart <-
+      useMart("ensembl",
+              dataset = "mmusculus_gene_ensembl",
+              host = "https://dec2021.archive.ensembl.org/")
+    
+    mgenes <- rownames(so)
+    
+    mouse_human_genes <-
+      getLDS(
+        attributes = c("mgi_symbol"),
+        mart = mmart,
+        values = mgenes,
+        attributesL = c("hgnc_symbol"),
+        martL = hmart,
+        verbose = TRUE
+      )
+  }
+  )
+```
+

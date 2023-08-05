@@ -1,0 +1,1309 @@
+---
+title: "Preliminary TCGA analysis"
+execute: 
+  freeze: true
+  message: false
+  warning: false
+---
+
+```{r}
+library(here)
+source(here("lib", "setup.R"))
+source(here("lib", "helper_Seurat.R"))
+source(here("lib", "helper.R"))
+source(here("lib", "aesthetics.R"))
+
+library(plotly)
+library(DT)
+library(GSVA)
+library(survminer)
+library(survival)
+```
+
+# Generate ssGSEA scores from TCGA samples
+
+Read in the gene set signatures that we derived above, along with the TCGA data clinical annotations and normalized RNAseq. 
+
+```{r}
+gs_list <- readRDS(file.path(results_dir, "myeloid_scRNA_signatures_20.200.rds"))
+monocyte_specific_gs_list <- readRDS(file.path(results_dir, "myeloid_scRNA_signatures_Ccr2_and_inflammatory_monocyte_specific_genes.rds"))
+```
+
+```{r}
+tcga_dir <- here("data", "TCGA_pan_can_atlas_2018", "skcm_tcga_pan_can_atlas_2018")
+tcga_data_clinical_patient <-
+    read_tsv(file.path(tcga_dir, "data_clinical_patient.txt"), 
+             skip = 4)
+tcga_data_mrna_seq_v2_rsem_wide <-
+    readRDS(file.path(tcga_dir, "data_mrna_seq_v2_rsem_wide.rds"))
+tcga_mtx <- tcga_data_mrna_seq_v2_rsem_wide %>% 
+    column_to_rownames("Hugo_Symbol") %>% 
+    as.matrix()
+```
+
+
+We'll need to convert the human gene names into mouse gene names to match with the signatures. 
+
+```{r}
+mouse_human_genes <- readRDS(here("data",  "mouse_human_genes.rds"))
+human_mouse_key <- set_names(mouse_human_genes$MGI.symbol, mouse_human_genes$HGNC.symbol)
+
+new_genes <- human_mouse_key[rownames(tcga_mtx)]
+new_genes_filtered <- new_genes[!is.na(new_genes)]
+
+mouse_tcga_mtx <- tcga_mtx[which(!is.na(new_genes)),]
+rownames(mouse_tcga_mtx) <- new_genes_filtered
+```
+
+## run ssGSEA on SKCM
+
+Now, run ssGSEA on each sample from TCGA SKCM using the myeloid scRNAseq signatures. 
+
+```{r, results = 'hide'}
+run_gsva <- function(mtx, gs) {
+    gsva_out <- gsva(
+        mtx,
+        gset.idx.list = gs,
+        method = "ssgsea",
+        kcdf = "Gaussian",
+        min.sz = 3
+    ) 
+    out <- as_tibble(gsva_out, rownames = "gs_name")
+    return(out)
+}
+```
+
+
+```{r}
+gsva_out <- run_or_readRDS(
+    file.path(results_dir, "ssGSEA_myeloid_scRNAseq_signatures_20.200.rds"), 
+    function() {
+        map_dfr(gs_list, ~run_gsva(mouse_tcga_mtx, ..1), .id = "ngenes")
+    }
+)
+gsva_tidy <- gsva_out %>% 
+    pivot_longer(cols = 3:ncol(.)) %>% 
+    group_by(gs_name, ngenes) %>% 
+    mutate(scaled_value = as.vector(scale(value)))
+```
+
+## Monocyte specific signatures
+
+```{r}
+gsva_monocyte.sp_out <- run_or_readRDS(
+    file.path(results_dir, "ssGSEA_myeloid_scRNAseq_signatures_Ccr2_and_inflammatory_monocyte_specific_genes.rds"), 
+    function() {
+        run_gsva(mouse_tcga_mtx, monocyte_specific_gs_list)
+    }
+)
+gsva_monocyte.sp_tidy <- gsva_monocyte.sp_out %>% 
+    pivot_longer(cols = 2:ncol(.)) %>% 
+    group_by(gs_name) %>% 
+    mutate(scaled_value = as.vector(scale(value)))
+```
+
+## Number of genes included in signature
+
+First, I wanted to examine the effects of changing the number of top differential genes taken to generate the signature. A couple observations: 
+
+* More genes included, higher ssGSEA score. 
+* rank order of samples seems consistent upon including 100-200 genes or so. 
+
+```{r, fig.asp = 1, fig.width = 5}
+gsva_tidy %>% 
+    mutate(ngenes = factor(ngenes, levels = sort(as.integer(unique(.$ngenes))))) %>%  
+    ggplot() + 
+    aes(ngenes, value) + 
+    geom_point(size = 0.1) + 
+    geom_line(aes(group = name), alpha = 0.1, linewidth = 0.1) + 
+    facet_wrap(~gs_name, ncol = 1)
+```
+
+Signature using 200 genes seems like a reasonable way to go. 
+
+## Increase in myeloid cell subsets
+
+As expected, with an increase in inflammatory monocytes, we also see an increase in Ccr2 monocytes, MDSC, and M2 macrophages. The highest correlation is between Ccr2 monocytes and inflammatory monocytes. 
+
+```{r}
+gsva_tidy_200 <- gsva_tidy %>% 
+    filter(ngenes == "200")
+gsva_wide_200 <- gsva_tidy_200 %>%
+    pivot_wider(id_cols = name,
+                names_from = gs_name,
+                values_from = value) 
+gsva_wide_200 %>%
+    ggplot() +
+    aes(Inflammatory_monocytes_vs_rest, Ccr2_monocytes_vs_rest) +
+    geom_point() +
+    geom_abline() + 
+    coord_fixed()  + 
+    stat_cor()
+
+gsva_wide_200 %>%
+    ggplot() +
+    aes(Inflammatory_monocytes_vs_rest, MDSC_vs_rest) +
+    geom_point() +
+    geom_abline() + 
+    coord_fixed()  + 
+    stat_cor()
+
+gsva_wide_200 %>%
+    ggplot() +
+    aes(Inflammatory_monocytes_vs_rest, M2_macs_vs_rest) +
+    geom_point() +
+    geom_abline() + 
+    coord_fixed()  + 
+    stat_cor()
+```
+
+## Survival in TCGA cohort using inflammatory monocyte to other myeloid score difference
+
+### TCGA SKCM, all
+
+First, we look at how these signatures work against the entire TCGA cohort. 
+
+* Inflamm monocyte vs M2 macs
+
+```{r, fig.asp = 1}
+inflamm_vs_M2_df <- gsva_wide_200 %>% 
+    mutate(PATIENT_ID = str_sub(name, end = -4)) %>% 
+    filter(PATIENT_ID %in% tcga_data_clinical_patient$PATIENT_ID) %>% 
+    mutate(inflamm_vs_M2 = Inflammatory_monocytes_vs_rest - M2_macs_vs_rest) %>% 
+    dplyr::select(PATIENT_ID, inflamm_vs_M2) %>% 
+    mutate(ratio_high_vs_low = ifelse(inflamm_vs_M2 > median(inflamm_vs_M2), "high", "low"))
+
+os_fit <- survfit(
+    Surv(OS_MONTHS, OS_STATUS) ~ ratio_high_vs_low,
+    data = tcga_data_clinical_patient %>%
+        mutate(OS_STATUS = as.integer(str_extract(OS_STATUS, "."))) %>%
+        left_join(inflamm_vs_M2_df, by = "PATIENT_ID")
+)
+gg <- ggsurvplot(
+    os_fit,
+    ncensor.plot = FALSE,
+    pval = TRUE,
+    conf.int = FALSE,
+    risk.table = TRUE,
+    risk.table.col = "strata",
+    linetype = "strata",
+    pval.coord = c(5, 0.1)
+)
+gg
+```
+
+
+
+
+* Inflamm monocyte vs MDSC
+
+```{r, fig.asp = 1}
+inflamm_vs_mdsc_df <- gsva_wide_200 %>% 
+    mutate(PATIENT_ID = str_sub(name, end = -4)) %>% 
+    filter(PATIENT_ID %in% tcga_data_clinical_patient$PATIENT_ID) %>% 
+    mutate(inflamm_vs_mdsc = Inflammatory_monocytes_vs_rest - MDSC_vs_rest) %>% 
+    dplyr::select(PATIENT_ID, inflamm_vs_mdsc) %>% 
+    mutate(ratio_high_vs_low = ifelse(inflamm_vs_mdsc > median(inflamm_vs_mdsc), "high", "low"))
+
+os_fit <- survfit(
+    Surv(OS_MONTHS, OS_STATUS) ~ ratio_high_vs_low,
+    data = tcga_data_clinical_patient %>%
+        mutate(OS_STATUS = as.integer(str_extract(OS_STATUS, "."))) %>%
+        left_join(inflamm_vs_mdsc_df, by = "PATIENT_ID")
+)
+gg <- ggsurvplot(
+    os_fit,
+    ncensor.plot = FALSE,
+    pval = TRUE,
+    conf.int = FALSE,
+    risk.table = TRUE,
+    risk.table.col = "strata",
+    linetype = "strata",
+    pval.coord = c(5, 0.1)
+)
+gg
+```
+
+
+* Inflamm monocyte vs ccr2 monocytes
+
+```{r, fig.asp = 1}
+inflamm_vs_ccr2_df <- gsva_wide_200 %>% 
+    mutate(PATIENT_ID = str_sub(name, end = -4)) %>% 
+    filter(PATIENT_ID %in% tcga_data_clinical_patient$PATIENT_ID) %>% 
+    mutate(inflamm_vs_ccr2 = Inflammatory_monocytes_vs_rest - Ccr2_monocytes_vs_rest) %>% 
+    dplyr::select(PATIENT_ID, inflamm_vs_ccr2) %>% 
+    mutate(ratio_high_vs_low = ifelse(inflamm_vs_ccr2 > median(inflamm_vs_ccr2), "high", "low"))
+
+os_fit <- survfit(
+    Surv(OS_MONTHS, OS_STATUS) ~ ratio_high_vs_low,
+    data = tcga_data_clinical_patient %>%
+        mutate(OS_STATUS = as.integer(str_extract(OS_STATUS, "."))) %>%
+        left_join(inflamm_vs_ccr2_df, by = "PATIENT_ID")
+)
+gg <- ggsurvplot(
+    os_fit,
+    ncensor.plot = FALSE,
+    pval = TRUE,
+    conf.int = FALSE,
+    risk.table = TRUE,
+    risk.table.col = "strata",
+    linetype = "strata",
+    pval.coord = c(5, 0.1)
+)
+gg
+```
+
+### TCGA SKCM, quartiles
+
+```{r, fig.asp = 1}
+inflamm_vs_M2_df <- gsva_wide_200 %>% 
+    mutate(PATIENT_ID = str_sub(name, end = -4)) %>% 
+    filter(PATIENT_ID %in% tcga_data_clinical_patient$PATIENT_ID) %>% 
+    mutate(inflamm_vs_M2 = Inflammatory_monocytes_vs_rest - M2_macs_vs_rest) %>% 
+    dplyr::select(PATIENT_ID, inflamm_vs_M2) %>% 
+    mutate(ratio_quartiles = case_when(
+        inflamm_vs_M2 > quantile(inflamm_vs_M2, 0.75) ~ ">Q3", 
+        inflamm_vs_M2 > quantile(inflamm_vs_M2, 0.5) ~ "Q2-Q3", 
+        inflamm_vs_M2 > quantile(inflamm_vs_M2, 0.25) ~ "Q1-Q2", 
+        TRUE ~ "<Q1"
+    )) %>% 
+    mutate(ratio_quartiles = factor(ratio_quartiles, levels = c("<Q1", "Q1-Q2", "Q2-Q3", ">Q3")))
+
+os_fit <- survfit(
+    Surv(OS_MONTHS, OS_STATUS) ~ ratio_quartiles,
+    data = tcga_data_clinical_patient %>%
+        mutate(OS_STATUS = as.integer(str_extract(OS_STATUS, "."))) %>%
+        left_join(inflamm_vs_M2_df, by = "PATIENT_ID")
+)
+gg <- ggsurvplot(
+    os_fit,
+    ncensor.plot = FALSE,
+    pval = TRUE,
+    conf.int = FALSE,
+    risk.table = TRUE,
+    risk.table.col = "strata",
+    linetype = "strata",
+    pval.coord = c(5, 0.1), 
+    palette = brewer.pal(4, "Blues")
+)
+gg
+``` 
+
+```{r, fig.asp = 1}
+inflamm_vs_mdsc_df <- gsva_wide_200 %>% 
+    mutate(PATIENT_ID = str_sub(name, end = -4)) %>% 
+    filter(PATIENT_ID %in% tcga_data_clinical_patient$PATIENT_ID) %>% 
+    mutate(inflamm_vs_mdsc = Inflammatory_monocytes_vs_rest - MDSC_vs_rest) %>% 
+    dplyr::select(PATIENT_ID, inflamm_vs_mdsc) %>% 
+    mutate(ratio_quartiles = case_when(
+        inflamm_vs_mdsc > quantile(inflamm_vs_mdsc, 0.75) ~ ">Q3", 
+        inflamm_vs_mdsc > quantile(inflamm_vs_mdsc, 0.5) ~ "Q2-Q3", 
+        inflamm_vs_mdsc > quantile(inflamm_vs_mdsc, 0.25) ~ "Q1-Q2", 
+        TRUE ~ "<Q1"
+    )) %>% 
+    mutate(ratio_quartiles = factor(ratio_quartiles, levels = c("<Q1", "Q1-Q2", "Q2-Q3", ">Q3")))
+
+os_fit <- survfit(
+    Surv(OS_MONTHS, OS_STATUS) ~ ratio_quartiles,
+    data = tcga_data_clinical_patient %>%
+        mutate(OS_STATUS = as.integer(str_extract(OS_STATUS, "."))) %>%
+        left_join(inflamm_vs_mdsc_df, by = "PATIENT_ID")
+)
+gg <- ggsurvplot(
+    os_fit,
+    ncensor.plot = FALSE,
+    pval = TRUE,
+    conf.int = FALSE,
+    risk.table = TRUE,
+    risk.table.col = "strata",
+    linetype = "strata",
+    pval.coord = c(5, 0.1), 
+    palette = brewer.pal(4, "Blues")
+)
+gg
+```
+
+```{r, fig.asp = 1}
+inflamm_vs_ccr2_df <- gsva_wide_200 %>% 
+    mutate(PATIENT_ID = str_sub(name, end = -4)) %>% 
+    filter(PATIENT_ID %in% tcga_data_clinical_patient$PATIENT_ID) %>% 
+    mutate(inflamm_vs_ccr2 = Inflammatory_monocytes_vs_rest - Ccr2_monocytes_vs_rest) %>% 
+    dplyr::select(PATIENT_ID, inflamm_vs_ccr2) %>% 
+    mutate(ratio_quartiles = case_when(
+        inflamm_vs_ccr2 > quantile(inflamm_vs_ccr2, 0.75) ~ ">Q3", 
+        inflamm_vs_ccr2 > quantile(inflamm_vs_ccr2, 0.5) ~ "Q2-Q3", 
+        inflamm_vs_ccr2 > quantile(inflamm_vs_ccr2, 0.25) ~ "Q1-Q2", 
+        TRUE ~ "<Q1"
+    )) %>% 
+    mutate(ratio_quartiles = factor(ratio_quartiles, levels = c("<Q1", "Q1-Q2", "Q2-Q3", ">Q3")))
+
+os_fit <- survfit(
+    Surv(OS_MONTHS, OS_STATUS) ~ ratio_quartiles,
+    data = tcga_data_clinical_patient %>%
+        mutate(OS_STATUS = as.integer(str_extract(OS_STATUS, "."))) %>%
+        left_join(inflamm_vs_ccr2_df, by = "PATIENT_ID")
+)
+gg <- ggsurvplot(
+    os_fit,
+    ncensor.plot = FALSE,
+    pval = TRUE,
+    conf.int = FALSE,
+    risk.table = TRUE,
+    risk.table.col = "strata",
+    linetype = "strata",
+    pval.coord = c(5, 0.1), 
+    palette = brewer.pal(4, "Blues")
+)
+gg
+```
+
+### TCGA SKCM, stage III and stage IV
+
+Then, we subset the tcga cohort to focus on patients with stage III or IV cancer. 
+
+```{r}
+tcga_data_clinical_patient$AJCC_PATHOLOGIC_TUMOR_STAGE %>% unique()
+tcga_data_clinical_patient_stageIV <- tcga_data_clinical_patient %>% 
+    filter(AJCC_PATHOLOGIC_TUMOR_STAGE %in% c("STAGE IV", "STAGE III", "STAGE IIIA", "STAGE IIIB", "STAGE IIIC"))
+```
+
+* Inflamm monocyte vs M2 macs
+
+```{r, fig.asp = 1}
+inflamm_vs_M2_df <- gsva_wide_200 %>% 
+    mutate(PATIENT_ID = str_sub(name, end = -4)) %>% 
+    filter(PATIENT_ID %in% tcga_data_clinical_patient_stageIV$PATIENT_ID) %>% 
+    mutate(inflamm_vs_M2 = Inflammatory_monocytes_vs_rest - M2_macs_vs_rest) %>% 
+    dplyr::select(PATIENT_ID, inflamm_vs_M2) %>% 
+    mutate(ratio_high_vs_low = ifelse(inflamm_vs_M2 > median(inflamm_vs_M2), "high", "low"))
+
+os_fit <- survfit(
+    Surv(OS_MONTHS, OS_STATUS) ~ ratio_high_vs_low,
+    data = tcga_data_clinical_patient_stageIV %>%
+        mutate(OS_STATUS = as.integer(str_extract(OS_STATUS, "."))) %>%
+        left_join(inflamm_vs_M2_df, by = "PATIENT_ID")
+)
+gg <- ggsurvplot(
+    os_fit,
+    ncensor.plot = FALSE,
+    pval = TRUE,
+    conf.int = FALSE,
+    risk.table = TRUE,
+    risk.table.col = "strata",
+    linetype = "strata",
+    pval.coord = c(5, 0.1)
+)
+gg
+```
+
+* Inflamm monocyte vs MDSC
+
+```{r, fig.asp = 1}
+inflamm_vs_mdsc_df <- gsva_wide_200 %>% 
+    mutate(PATIENT_ID = str_sub(name, end = -4)) %>% 
+    filter(PATIENT_ID %in% tcga_data_clinical_patient_stageIV$PATIENT_ID) %>% 
+    mutate(inflamm_vs_mdsc = Inflammatory_monocytes_vs_rest - MDSC_vs_rest) %>% 
+    dplyr::select(PATIENT_ID, inflamm_vs_mdsc) %>% 
+    mutate(ratio_high_vs_low = ifelse(inflamm_vs_mdsc > median(inflamm_vs_mdsc), "high", "low"))
+
+os_fit <- survfit(
+    Surv(OS_MONTHS, OS_STATUS) ~ ratio_high_vs_low,
+    data = tcga_data_clinical_patient_stageIV %>%
+        mutate(OS_STATUS = as.integer(str_extract(OS_STATUS, "."))) %>%
+        left_join(inflamm_vs_mdsc_df, by = "PATIENT_ID")
+)
+gg <- ggsurvplot(
+    os_fit,
+    ncensor.plot = FALSE,
+    pval = TRUE,
+    conf.int = FALSE,
+    risk.table = TRUE,
+    risk.table.col = "strata",
+    linetype = "strata",
+    pval.coord = c(5, 0.1)
+)
+gg
+```
+
+* Inflamm monocyte vs ccr2
+
+```{r, fig.asp = 1}
+inflamm_vs_ccr2_df <- gsva_wide_200 %>% 
+    mutate(PATIENT_ID = str_sub(name, end = -4)) %>% 
+    filter(PATIENT_ID %in% tcga_data_clinical_patient_stageIV$PATIENT_ID) %>% 
+    mutate(inflamm_vs_ccr2 = Inflammatory_monocytes_vs_rest - Ccr2_monocytes_vs_rest) %>% 
+    dplyr::select(PATIENT_ID, inflamm_vs_ccr2) %>% 
+    mutate(ratio_high_vs_low = ifelse(inflamm_vs_ccr2 > median(inflamm_vs_ccr2), "high", "low"))
+
+os_fit <- survfit(
+    Surv(OS_MONTHS, OS_STATUS) ~ ratio_high_vs_low,
+    data = tcga_data_clinical_patient_stageIV %>%
+        mutate(OS_STATUS = as.integer(str_extract(OS_STATUS, "."))) %>%
+        left_join(inflamm_vs_ccr2_df, by = "PATIENT_ID")
+)
+gg <- ggsurvplot(
+    os_fit,
+    ncensor.plot = FALSE,
+    pval = TRUE,
+    conf.int = FALSE,
+    risk.table = TRUE,
+    risk.table.col = "strata",
+    linetype = "strata",
+    pval.coord = c(5, 0.1)
+)
+gg
+```
+
+
+
+### TCGA SKCM, stage III and stage IV, quartiles
+
+* Inflamm monocyte vs M2 macs
+
+```{r, fig.asp = 1}
+inflamm_vs_M2_df <- gsva_wide_200 %>% 
+    mutate(PATIENT_ID = str_sub(name, end = -4)) %>% 
+    filter(PATIENT_ID %in% tcga_data_clinical_patient_stageIV$PATIENT_ID) %>% 
+    mutate(inflamm_vs_M2 = Inflammatory_monocytes_vs_rest - M2_macs_vs_rest) %>% 
+    dplyr::select(PATIENT_ID, inflamm_vs_M2) %>% 
+    mutate(ratio_quartiles = case_when(
+        inflamm_vs_M2 > quantile(inflamm_vs_M2, 0.75) ~ ">Q3", 
+        inflamm_vs_M2 > quantile(inflamm_vs_M2, 0.5) ~ "Q2-Q3", 
+        inflamm_vs_M2 > quantile(inflamm_vs_M2, 0.25) ~ "Q1-Q2", 
+        TRUE ~ "<Q1"
+    )) %>% 
+    mutate(ratio_quartiles = factor(ratio_quartiles, levels = c("<Q1", "Q1-Q2", "Q2-Q3", ">Q3")))
+
+os_fit <- survfit(
+    Surv(OS_MONTHS, OS_STATUS) ~ ratio_quartiles,
+    data = tcga_data_clinical_patient_stageIV %>%
+        mutate(OS_STATUS = as.integer(str_extract(OS_STATUS, "."))) %>%
+        left_join(inflamm_vs_M2_df, by = "PATIENT_ID")
+)
+gg <- ggsurvplot(
+    os_fit,
+    ncensor.plot = FALSE,
+    pval = TRUE,
+    conf.int = FALSE,
+    risk.table = TRUE,
+    risk.table.col = "strata",
+    linetype = "strata",
+    pval.coord = c(5, 0.1), 
+    palette = brewer.pal(4, "Blues")
+)
+gg
+```
+
+* Inflamm monocyte vs MDSC
+
+```{r, fig.asp = 1}
+inflamm_vs_mdsc_df <- gsva_wide_200 %>% 
+    mutate(PATIENT_ID = str_sub(name, end = -4)) %>% 
+    filter(PATIENT_ID %in% tcga_data_clinical_patient_stageIV$PATIENT_ID) %>% 
+    mutate(inflamm_vs_mdsc = Inflammatory_monocytes_vs_rest - MDSC_vs_rest) %>% 
+    dplyr::select(PATIENT_ID, inflamm_vs_mdsc) %>% 
+    mutate(ratio_quartiles = case_when(
+        inflamm_vs_mdsc > quantile(inflamm_vs_mdsc, 0.75) ~ ">Q3", 
+        inflamm_vs_mdsc > quantile(inflamm_vs_mdsc, 0.5) ~ "Q2-Q3", 
+        inflamm_vs_mdsc > quantile(inflamm_vs_mdsc, 0.25) ~ "Q1-Q2", 
+        TRUE ~ "<Q1"
+    )) %>% 
+    mutate(ratio_quartiles = factor(ratio_quartiles, levels = c("<Q1", "Q1-Q2", "Q2-Q3", ">Q3")))
+
+os_fit <- survfit(
+    Surv(OS_MONTHS, OS_STATUS) ~ ratio_quartiles,
+    data = tcga_data_clinical_patient_stageIV %>%
+        mutate(OS_STATUS = as.integer(str_extract(OS_STATUS, "."))) %>%
+        left_join(inflamm_vs_mdsc_df, by = "PATIENT_ID")
+)
+gg <- ggsurvplot(
+    os_fit,
+    ncensor.plot = FALSE,
+    pval = TRUE,
+    conf.int = FALSE,
+    risk.table = TRUE,
+    risk.table.col = "strata",
+    linetype = "strata",
+    pval.coord = c(5, 0.1), 
+    palette = brewer.pal(4, "Blues")
+)
+gg
+```
+
+* Inflamm monocyte vs ccr2
+
+```{r, fig.asp = 1}
+inflamm_vs_ccr2_df <- gsva_wide_200 %>% 
+    mutate(PATIENT_ID = str_sub(name, end = -4)) %>% 
+    filter(PATIENT_ID %in% tcga_data_clinical_patient_stageIV$PATIENT_ID) %>% 
+    mutate(inflamm_vs_ccr2 = Inflammatory_monocytes_vs_rest - Ccr2_monocytes_vs_rest) %>% 
+    dplyr::select(PATIENT_ID, inflamm_vs_ccr2) %>% 
+    mutate(ratio_quartiles = case_when(
+        inflamm_vs_ccr2 > quantile(inflamm_vs_ccr2, 0.75) ~ ">Q3", 
+        inflamm_vs_ccr2 > quantile(inflamm_vs_ccr2, 0.5) ~ "Q2-Q3", 
+        inflamm_vs_ccr2 > quantile(inflamm_vs_ccr2, 0.25) ~ "Q1-Q2", 
+        TRUE ~ "<Q1"
+    )) %>% 
+    mutate(ratio_quartiles = factor(ratio_quartiles, levels = c("<Q1", "Q1-Q2", "Q2-Q3", ">Q3")))
+
+os_fit <- survfit(
+    Surv(OS_MONTHS, OS_STATUS) ~ ratio_quartiles,
+    data = tcga_data_clinical_patient_stageIV %>%
+        mutate(OS_STATUS = as.integer(str_extract(OS_STATUS, "."))) %>%
+        left_join(inflamm_vs_ccr2_df, by = "PATIENT_ID")
+)
+gg <- ggsurvplot(
+    os_fit,
+    ncensor.plot = FALSE,
+    pval = TRUE,
+    conf.int = FALSE,
+    risk.table = TRUE,
+    risk.table.col = "strata",
+    linetype = "strata",
+    pval.coord = c(5, 0.1), 
+    palette = brewer.pal(4, "Blues")
+)
+gg
+```
+
+
+
+
+## monocyte specific signatures 
+
+With the exclusive signatures, the Ccr2 and inflammatory monocyte scores are not correlated. And despite the Ccr2 signature being much fewer genes relative to the "same" (the genes shared between the Ccr2 and the inflammatory monocytes DGE) and the inflammatory monocyte signature, it correlates with the "same" monocyte signature, and not with the inflammatory monocyte signature. 
+
+```{r}
+
+gsva_monocyte.sp_tidy %>% 
+    pivot_wider(id_cols = name, 
+                names_from = gs_name, 
+                values_from = scaled_value) %>% 
+    ggplot() + 
+    aes(Ccr2, Inflamm) + 
+    geom_point() + 
+    geom_abline() + 
+    stat_cor()
+
+gsva_monocyte.sp_tidy %>% 
+    pivot_wider(id_cols = name, 
+                names_from = gs_name, 
+                values_from = scaled_value) %>% 
+    ggplot() + 
+    aes(Ccr2, same) + 
+    geom_point() + 
+    geom_abline() + 
+    stat_cor()
+
+gsva_monocyte.sp_tidy %>% 
+    pivot_wider(id_cols = name, 
+                names_from = gs_name, 
+                values_from = scaled_value) %>% 
+    ggplot() + 
+    aes(Inflamm, same) + 
+    geom_point() + 
+    geom_abline() + 
+    stat_cor()
+```
+
+### Survival in TCGA cohort
+
+
+```{r, fig.asp = 1}
+inflamm_vs_ccr2_df <- gsva_monocyte.sp_tidy %>% 
+    pivot_wider(id_cols = name, 
+                names_from = gs_name, 
+                values_from = scaled_value) %>% 
+    mutate(PATIENT_ID = str_sub(name, end = -4)) %>% 
+    filter(PATIENT_ID %in% tcga_data_clinical_patient_stageIV$PATIENT_ID) %>% 
+    mutate(inflamm_vs_ccr2 = Inflamm - Ccr2) %>% 
+    dplyr::select(PATIENT_ID, inflamm_vs_ccr2) %>% 
+    mutate(ratio_high_vs_low = ifelse(inflamm_vs_ccr2 > median(inflamm_vs_ccr2), "high", "low"))
+
+os_fit <- survfit(
+    Surv(OS_MONTHS, OS_STATUS) ~ ratio_high_vs_low,
+    data = tcga_data_clinical_patient_stageIV %>%
+        mutate(OS_STATUS = as.integer(str_extract(OS_STATUS, "."))) %>%
+        left_join(inflamm_vs_ccr2_df, by = "PATIENT_ID")
+)
+gg <- ggsurvplot(
+    os_fit,
+    ncensor.plot = FALSE,
+    pval = TRUE,
+    conf.int = FALSE,
+    risk.table = TRUE,
+    risk.table.col = "strata",
+    linetype = "strata",
+    pval.coord = c(5, 0.1)
+)
+gg
+```
+
+```{r, fig.asp = 1}
+inflamm_vs_ccr2_df <- gsva_monocyte.sp_tidy %>% 
+    pivot_wider(id_cols = name, 
+                names_from = gs_name, 
+                values_from = scaled_value) %>% 
+    mutate(PATIENT_ID = str_sub(name, end = -4)) %>% 
+    filter(PATIENT_ID %in% tcga_data_clinical_patient_stageIV$PATIENT_ID) %>% 
+    mutate(inflamm_vs_ccr2 = Inflamm - Ccr2) %>% 
+    dplyr::select(PATIENT_ID, inflamm_vs_ccr2) %>% 
+    mutate(ratio_quartiles = case_when(
+        inflamm_vs_ccr2 > quantile(inflamm_vs_ccr2, 0.75) ~ ">Q3", 
+        inflamm_vs_ccr2 > quantile(inflamm_vs_ccr2, 0.5) ~ "Q2-Q3", 
+        inflamm_vs_ccr2 > quantile(inflamm_vs_ccr2, 0.25) ~ "Q1-Q2", 
+        TRUE ~ "<Q1"
+    )) %>% 
+    mutate(ratio_quartiles = factor(ratio_quartiles, levels = c("<Q1", "Q1-Q2", "Q2-Q3", ">Q3")))
+
+os_fit <- survfit(
+    Surv(OS_MONTHS, OS_STATUS) ~ ratio_quartiles,
+    data = tcga_data_clinical_patient_stageIV %>%
+        mutate(OS_STATUS = as.integer(str_extract(OS_STATUS, "."))) %>%
+        left_join(inflamm_vs_ccr2_df, by = "PATIENT_ID")
+)
+gg <- ggsurvplot(
+    os_fit,
+    ncensor.plot = FALSE,
+    pval = TRUE,
+    conf.int = FALSE,
+    risk.table = TRUE,
+    risk.table.col = "strata",
+    linetype = "strata",
+    pval.coord = c(5, 0.1), 
+    palette = brewer.pal(4, "Blues")
+)
+gg
+```
+
+# Survival in other cancer types (2018 TCGA Pan can)
+
+Downloaded the TCGA data from cBioPortal FYI. Just went to this URL (https://www.cbioportal.org/datasets) and searched for PanCancer. 
+
+Defining some helper functions to handle the data. Also note there are some key processing choices here, like using the Hugo Symbol instead of the Entrez Gene ID, which could make a difference in results.  
+
+```{r}
+read_in_TCGA <- function(subdir) {
+    data_clinical_patient <-
+        read_tsv(file.path(subdir, "data_clinical_patient.txt"), 
+                 skip = 4)
+    tpm_mtx <- read_tsv(file.path(subdir, "data_mrna_seq_v2_rsem_zscores_ref_all_samples.txt")) %>% 
+        dplyr::select(-Entrez_Gene_Id) %>% 
+        drop_na(Hugo_Symbol) %>% 
+        {.[!duplicated(.$Hugo_Symbol),]} %>% 
+        column_to_rownames("Hugo_Symbol") %>%
+        as.matrix()
+    
+    new_genes <- human_mouse_key[rownames(tpm_mtx)]
+    new_genes_filtered <- new_genes[!is.na(new_genes)]
+    mouse_tpm_mtx <- tpm_mtx[which(!is.na(new_genes)),]
+    rownames(mouse_tpm_mtx) <- new_genes_filtered
+    
+    return(list(
+        data_clinical_patient = data_clinical_patient, 
+        tpm_mtx = tpm_mtx, 
+        mouse_tpm_mtx = mouse_tpm_mtx
+    ))
+}
+```
+
+## BLCA, Bladder Urothelial Cancer
+
+```{r}
+blca_dir <- here("data", "TCGA_pan_can_atlas_2018", "blca_tcga_pan_can_atlas_2018")
+blca_out <- read_in_TCGA(blca_dir)
+gsva_out <- run_or_readRDS(
+    file.path(results_dir, "ssGSEA_myeloid_scRNAseq_signatures_200_BLCA.rds"), 
+    function() {
+        run_gsva(blca_out$mouse_tpm_mtx, c(gs_list$`200`, monocyte_specific_gs_list))
+    }
+)
+blca_out$gsva_wide <- gsva_out %>% 
+    pivot_longer(cols = 2:ncol(.)) %>% 
+    group_by(gs_name) %>% 
+    mutate(scaled_value = as.vector(scale(value))) %>% 
+    pivot_wider(id_cols = name, 
+                names_from = gs_name, 
+                values_from = scaled_value)
+```
+
+## Survival curves
+
+### M2 vs inflamm monocytes
+
+```{r, fig.asp = 1}
+inflamm_vs_M2_df <- blca_out$gsva_wide %>% 
+    mutate(PATIENT_ID = str_sub(name, end = -4)) %>% 
+    filter(PATIENT_ID %in% blca_out$data_clinical_patient$PATIENT_ID) %>% 
+    mutate(inflamm_vs_M2 = Inflammatory_monocytes_vs_rest - M2_macs_vs_rest) %>% 
+    dplyr::select(PATIENT_ID, inflamm_vs_M2) %>% 
+    mutate(ratio_high_vs_low = ifelse(inflamm_vs_M2 > median(inflamm_vs_M2), "high", "low"))
+
+os_fit <- survfit(
+    Surv(OS_MONTHS, OS_STATUS) ~ ratio_high_vs_low,
+    data = blca_out$data_clinical_patient %>%
+        mutate(OS_STATUS = as.integer(str_extract(OS_STATUS, "."))) %>%
+        left_join(inflamm_vs_M2_df, by = "PATIENT_ID")
+)
+gg <- ggsurvplot(
+    os_fit,
+    ncensor.plot = FALSE,
+    pval = TRUE,
+    conf.int = FALSE,
+    risk.table = TRUE,
+    risk.table.col = "strata",
+    linetype = "strata",
+    pval.coord = c(5, 0.1)
+)
+gg
+```
+
+```{r, fig.asp = 1}
+inflamm_vs_M2_df <- blca_out$gsva_wide %>% 
+    mutate(PATIENT_ID = str_sub(name, end = -4)) %>% 
+    filter(PATIENT_ID %in% blca_out$data_clinical_patient$PATIENT_ID) %>% 
+    mutate(inflamm_vs_M2 = Inflammatory_monocytes_vs_rest - M2_macs_vs_rest) %>% 
+    dplyr::select(PATIENT_ID, inflamm_vs_M2) %>% 
+    mutate(ratio_quartiles = case_when(
+        inflamm_vs_M2 > quantile(inflamm_vs_M2, 0.75) ~ ">Q3", 
+        inflamm_vs_M2 > quantile(inflamm_vs_M2, 0.5) ~ "Q2-Q3", 
+        inflamm_vs_M2 > quantile(inflamm_vs_M2, 0.25) ~ "Q1-Q2", 
+        TRUE ~ "<Q1"
+    )) %>% 
+    mutate(ratio_quartiles = factor(ratio_quartiles, levels = c("<Q1", "Q1-Q2", "Q2-Q3", ">Q3")))
+
+os_fit <- survfit(
+    Surv(OS_MONTHS, OS_STATUS) ~ ratio_quartiles,
+    data = blca_out$data_clinical_patient %>%
+        mutate(OS_STATUS = as.integer(str_extract(OS_STATUS, "."))) %>%
+        left_join(inflamm_vs_M2_df, by = "PATIENT_ID")
+)
+gg <- ggsurvplot(
+    os_fit,
+    ncensor.plot = FALSE,
+    pval = TRUE,
+    conf.int = FALSE,
+    risk.table = TRUE,
+    risk.table.col = "strata",
+    linetype = "strata",
+    pval.coord = c(5, 0.1), 
+    palette = brewer.pal(4, "Blues")
+)
+gg
+```
+
+### Inflamm vs Ccr2 monocytes, specific
+
+
+```{r, fig.asp = 1}
+inflamm_vs_ccr2_df <- blca_out$gsva_wide %>% 
+    mutate(PATIENT_ID = str_sub(name, end = -4)) %>% 
+    filter(PATIENT_ID %in% blca_out$data_clinical_patient$PATIENT_ID) %>% 
+    mutate(inflamm_vs_ccr2 = Inflamm - Ccr2) %>% 
+    dplyr::select(PATIENT_ID, inflamm_vs_ccr2) %>% 
+    mutate(ratio_high_vs_low = ifelse(inflamm_vs_ccr2 > median(inflamm_vs_ccr2), "high", "low"))
+
+os_fit <- survfit(
+    Surv(OS_MONTHS, OS_STATUS) ~ ratio_high_vs_low,
+    data = blca_out$data_clinical_patient %>%
+        mutate(OS_STATUS = as.integer(str_extract(OS_STATUS, "."))) %>%
+        left_join(inflamm_vs_ccr2_df, by = "PATIENT_ID")
+)
+gg <- ggsurvplot(
+    os_fit,
+    ncensor.plot = FALSE,
+    pval = TRUE,
+    conf.int = FALSE,
+    risk.table = TRUE,
+    risk.table.col = "strata",
+    linetype = "strata",
+    pval.coord = c(5, 0.1)
+)
+gg
+```
+
+
+```{r, fig.asp = 1}
+inflamm_vs_ccr2_df <- blca_out$gsva_wide %>% 
+    mutate(PATIENT_ID = str_sub(name, end = -4)) %>% 
+    filter(PATIENT_ID %in% blca_out$data_clinical_patient$PATIENT_ID) %>% 
+    mutate(inflamm_vs_ccr2 = Inflamm - Ccr2) %>% 
+    dplyr::select(PATIENT_ID, inflamm_vs_ccr2) %>% 
+    mutate(ratio_quartiles = case_when(
+        inflamm_vs_ccr2 > quantile(inflamm_vs_ccr2, 0.75) ~ ">Q3", 
+        inflamm_vs_ccr2 > quantile(inflamm_vs_ccr2, 0.5) ~ "Q2-Q3", 
+        inflamm_vs_ccr2 > quantile(inflamm_vs_ccr2, 0.25) ~ "Q1-Q2", 
+        TRUE ~ "<Q1"
+    )) %>% 
+    mutate(ratio_quartiles = factor(ratio_quartiles, levels = c("<Q1", "Q1-Q2", "Q2-Q3", ">Q3")))
+
+os_fit <- survfit(
+    Surv(OS_MONTHS, OS_STATUS) ~ ratio_quartiles,
+    data = blca_out$data_clinical_patient %>%
+        mutate(OS_STATUS = as.integer(str_extract(OS_STATUS, "."))) %>%
+        left_join(inflamm_vs_ccr2_df, by = "PATIENT_ID")
+)
+gg <- ggsurvplot(
+    os_fit,
+    ncensor.plot = FALSE,
+    pval = TRUE,
+    conf.int = FALSE,
+    risk.table = TRUE,
+    risk.table.col = "strata",
+    linetype = "strata",
+    pval.coord = c(5, 0.1), 
+    palette = brewer.pal(4, "Blues")
+)
+gg
+```
+
+## LUSC, Lung squamous cell carcinoma
+
+```{r}
+lusc_dir <- here("data", "TCGA_pan_can_atlas_2018", "lusc_tcga_pan_can_atlas_2018")
+lusc_out <- read_in_TCGA(lusc_dir)
+gsva_out <- run_or_readRDS(
+    file.path(results_dir, "ssGSEA_myeloid_scRNAseq_signatures_200_LUSC.rds"), 
+    function() {
+        run_gsva(lusc_out$mouse_tpm_mtx, c(gs_list$`200`, monocyte_specific_gs_list))
+    }
+)
+lusc_out$gsva_wide <- gsva_out %>% 
+    pivot_longer(cols = 2:ncol(.)) %>% 
+    group_by(gs_name) %>% 
+    mutate(scaled_value = as.vector(scale(value))) %>% 
+    pivot_wider(id_cols = name, 
+                names_from = gs_name, 
+                values_from = scaled_value)
+```
+
+## Survival curves
+
+### M2 vs inflamm monocytes
+
+```{r, fig.asp = 1}
+inflamm_vs_M2_df <- lusc_out$gsva_wide %>% 
+    mutate(PATIENT_ID = str_sub(name, end = -4)) %>% 
+    filter(PATIENT_ID %in% lusc_out$data_clinical_patient$PATIENT_ID) %>% 
+    mutate(inflamm_vs_M2 = Inflammatory_monocytes_vs_rest - M2_macs_vs_rest) %>% 
+    dplyr::select(PATIENT_ID, inflamm_vs_M2) %>% 
+    mutate(ratio_high_vs_low = ifelse(inflamm_vs_M2 > median(inflamm_vs_M2), "high", "low"))
+
+os_fit <- survfit(
+    Surv(OS_MONTHS, OS_STATUS) ~ ratio_high_vs_low,
+    data = lusc_out$data_clinical_patient %>%
+        mutate(OS_STATUS = as.integer(str_extract(OS_STATUS, "."))) %>%
+        left_join(inflamm_vs_M2_df, by = "PATIENT_ID")
+)
+gg <- ggsurvplot(
+    os_fit,
+    ncensor.plot = FALSE,
+    pval = TRUE,
+    conf.int = FALSE,
+    risk.table = TRUE,
+    risk.table.col = "strata",
+    linetype = "strata",
+    pval.coord = c(5, 0.1)
+)
+gg
+```
+
+```{r, fig.asp = 1}
+inflamm_vs_M2_df <- lusc_out$gsva_wide %>% 
+    mutate(PATIENT_ID = str_sub(name, end = -4)) %>% 
+    filter(PATIENT_ID %in% lusc_out$data_clinical_patient$PATIENT_ID) %>% 
+    mutate(inflamm_vs_M2 = Inflammatory_monocytes_vs_rest - M2_macs_vs_rest) %>% 
+    dplyr::select(PATIENT_ID, inflamm_vs_M2) %>% 
+    mutate(ratio_quartiles = case_when(
+        inflamm_vs_M2 > quantile(inflamm_vs_M2, 0.75) ~ ">Q3", 
+        inflamm_vs_M2 > quantile(inflamm_vs_M2, 0.5) ~ "Q2-Q3", 
+        inflamm_vs_M2 > quantile(inflamm_vs_M2, 0.25) ~ "Q1-Q2", 
+        TRUE ~ "<Q1"
+    )) %>% 
+    mutate(ratio_quartiles = factor(ratio_quartiles, levels = c("<Q1", "Q1-Q2", "Q2-Q3", ">Q3")))
+
+os_fit <- survfit(
+    Surv(OS_MONTHS, OS_STATUS) ~ ratio_quartiles,
+    data = lusc_out$data_clinical_patient %>%
+        mutate(OS_STATUS = as.integer(str_extract(OS_STATUS, "."))) %>%
+        left_join(inflamm_vs_M2_df, by = "PATIENT_ID")
+)
+gg <- ggsurvplot(
+    os_fit,
+    ncensor.plot = FALSE,
+    pval = TRUE,
+    conf.int = FALSE,
+    risk.table = TRUE,
+    risk.table.col = "strata",
+    linetype = "strata",
+    pval.coord = c(5, 0.1), 
+    palette = brewer.pal(4, "Blues")
+)
+gg
+```
+
+### Inflamm vs Ccr2 monocytes, specific
+
+
+```{r, fig.asp = 1}
+inflamm_vs_ccr2_df <- lusc_out$gsva_wide %>% 
+    mutate(PATIENT_ID = str_sub(name, end = -4)) %>% 
+    filter(PATIENT_ID %in% lusc_out$data_clinical_patient$PATIENT_ID) %>% 
+    mutate(inflamm_vs_ccr2 = Inflamm - Ccr2) %>% 
+    dplyr::select(PATIENT_ID, inflamm_vs_ccr2) %>% 
+    mutate(ratio_high_vs_low = ifelse(inflamm_vs_ccr2 > median(inflamm_vs_ccr2), "high", "low"))
+
+os_fit <- survfit(
+    Surv(OS_MONTHS, OS_STATUS) ~ ratio_high_vs_low,
+    data = lusc_out$data_clinical_patient %>%
+        mutate(OS_STATUS = as.integer(str_extract(OS_STATUS, "."))) %>%
+        left_join(inflamm_vs_ccr2_df, by = "PATIENT_ID")
+)
+gg <- ggsurvplot(
+    os_fit,
+    ncensor.plot = FALSE,
+    pval = TRUE,
+    conf.int = FALSE,
+    risk.table = TRUE,
+    risk.table.col = "strata",
+    linetype = "strata",
+    pval.coord = c(5, 0.1)
+)
+gg
+```
+
+
+```{r, fig.asp = 1}
+inflamm_vs_ccr2_df <- lusc_out$gsva_wide %>% 
+    mutate(PATIENT_ID = str_sub(name, end = -4)) %>% 
+    filter(PATIENT_ID %in% lusc_out$data_clinical_patient$PATIENT_ID) %>% 
+    mutate(inflamm_vs_ccr2 = Inflamm - Ccr2) %>% 
+    dplyr::select(PATIENT_ID, inflamm_vs_ccr2) %>% 
+    mutate(ratio_quartiles = case_when(
+        inflamm_vs_ccr2 > quantile(inflamm_vs_ccr2, 0.75) ~ ">Q3", 
+        inflamm_vs_ccr2 > quantile(inflamm_vs_ccr2, 0.5) ~ "Q2-Q3", 
+        inflamm_vs_ccr2 > quantile(inflamm_vs_ccr2, 0.25) ~ "Q1-Q2", 
+        TRUE ~ "<Q1"
+    )) %>% 
+    mutate(ratio_quartiles = factor(ratio_quartiles, levels = c("<Q1", "Q1-Q2", "Q2-Q3", ">Q3")))
+
+os_fit <- survfit(
+    Surv(OS_MONTHS, OS_STATUS) ~ ratio_quartiles,
+    data = lusc_out$data_clinical_patient %>%
+        mutate(OS_STATUS = as.integer(str_extract(OS_STATUS, "."))) %>%
+        left_join(inflamm_vs_ccr2_df, by = "PATIENT_ID")
+)
+gg <- ggsurvplot(
+    os_fit,
+    ncensor.plot = FALSE,
+    pval = TRUE,
+    conf.int = FALSE,
+    risk.table = TRUE,
+    risk.table.col = "strata",
+    linetype = "strata",
+    pval.coord = c(5, 0.1), 
+    palette = brewer.pal(4, "Blues")
+)
+gg
+```
+
+## HNSC, Head and Neck Squamous Cell Carcinoma
+
+```{r}
+hnsc_dir <- here("data", "TCGA_pan_can_atlas_2018", "hnsc_tcga_pan_can_atlas_2018")
+hnsc_out <- read_in_TCGA(hnsc_dir)
+gsva_out <- run_or_readRDS(
+    file.path(results_dir, "ssGSEA_myeloid_scRNAseq_signatures_200_HNSC.rds"), 
+    function() {
+        run_gsva(hnsc_out$mouse_tpm_mtx, c(gs_list$`200`, monocyte_specific_gs_list))
+    }
+)
+hnsc_out$gsva_wide <- gsva_out %>% 
+    pivot_longer(cols = 2:ncol(.)) %>% 
+    group_by(gs_name) %>% 
+    mutate(scaled_value = as.vector(scale(value))) %>% 
+    pivot_wider(id_cols = name, 
+                names_from = gs_name, 
+                values_from = scaled_value)
+```
+
+## Survival curves
+
+### M2 vs inflamm monocytes
+
+```{r, fig.asp = 1}
+inflamm_vs_M2_df <- hnsc_out$gsva_wide %>% 
+    mutate(PATIENT_ID = str_sub(name, end = -4)) %>% 
+    filter(PATIENT_ID %in% hnsc_out$data_clinical_patient$PATIENT_ID) %>%
+    mutate(inflamm_vs_M2 = Inflammatory_monocytes_vs_rest - M2_macs_vs_rest) %>% 
+    dplyr::select(PATIENT_ID, inflamm_vs_M2) %>% 
+    mutate(ratio_high_vs_low = ifelse(inflamm_vs_M2 > median(inflamm_vs_M2), "high", "low"))
+
+os_fit <- survfit(
+    Surv(OS_MONTHS, OS_STATUS) ~ ratio_high_vs_low,
+    data = hnsc_out$data_clinical_patient %>%
+        mutate(OS_STATUS = as.integer(str_extract(OS_STATUS, "."))) %>%
+        left_join(inflamm_vs_M2_df, by = "PATIENT_ID")
+)
+gg <- ggsurvplot(
+    os_fit,
+    ncensor.plot = FALSE,
+    pval = TRUE,
+    conf.int = FALSE,
+    risk.table = TRUE,
+    risk.table.col = "strata",
+    linetype = "strata",
+    pval.coord = c(5, 0.1)
+)
+gg
+```
+
+```{r, fig.asp = 1}
+inflamm_vs_M2_df <- hnsc_out$gsva_wide %>% 
+    mutate(PATIENT_ID = str_sub(name, end = -4)) %>% 
+    filter(PATIENT_ID %in% hnsc_out$data_clinical_patient$PATIENT_ID) %>% 
+    mutate(inflamm_vs_M2 = Inflammatory_monocytes_vs_rest - M2_macs_vs_rest) %>% 
+    dplyr::select(PATIENT_ID, inflamm_vs_M2) %>% 
+    mutate(ratio_quartiles = case_when(
+        inflamm_vs_M2 > quantile(inflamm_vs_M2, 0.75) ~ ">Q3", 
+        inflamm_vs_M2 > quantile(inflamm_vs_M2, 0.5) ~ "Q2-Q3", 
+        inflamm_vs_M2 > quantile(inflamm_vs_M2, 0.25) ~ "Q1-Q2", 
+        TRUE ~ "<Q1"
+    )) %>% 
+    mutate(ratio_quartiles = factor(ratio_quartiles, levels = c("<Q1", "Q1-Q2", "Q2-Q3", ">Q3")))
+
+os_fit <- survfit(
+    Surv(OS_MONTHS, OS_STATUS) ~ ratio_quartiles,
+    data = hnsc_out$data_clinical_patient %>%
+        mutate(OS_STATUS = as.integer(str_extract(OS_STATUS, "."))) %>%
+        left_join(inflamm_vs_M2_df, by = "PATIENT_ID")
+)
+gg <- ggsurvplot(
+    os_fit,
+    ncensor.plot = FALSE,
+    pval = TRUE,
+    conf.int = FALSE,
+    risk.table = TRUE,
+    risk.table.col = "strata",
+    linetype = "strata",
+    pval.coord = c(5, 0.1), 
+    palette = brewer.pal(4, "Blues")
+)
+gg
+```
+
+### Inflamm vs Ccr2 monocytes, specific
+
+
+```{r, fig.asp = 1}
+inflamm_vs_ccr2_df <- hnsc_out$gsva_wide %>% 
+    mutate(PATIENT_ID = str_sub(name, end = -4)) %>% 
+    filter(PATIENT_ID %in% hnsc_out$data_clinical_patient$PATIENT_ID) %>% 
+    mutate(inflamm_vs_ccr2 = Inflamm - Ccr2) %>% 
+    dplyr::select(PATIENT_ID, inflamm_vs_ccr2) %>% 
+    mutate(ratio_high_vs_low = ifelse(inflamm_vs_ccr2 > median(inflamm_vs_ccr2), "high", "low"))
+
+os_fit <- survfit(
+    Surv(OS_MONTHS, OS_STATUS) ~ ratio_high_vs_low,
+    data = hnsc_out$data_clinical_patient %>%
+        mutate(OS_STATUS = as.integer(str_extract(OS_STATUS, "."))) %>%
+        left_join(inflamm_vs_ccr2_df, by = "PATIENT_ID")
+)
+gg <- ggsurvplot(
+    os_fit,
+    ncensor.plot = FALSE,
+    pval = TRUE,
+    conf.int = FALSE,
+    risk.table = TRUE,
+    risk.table.col = "strata",
+    linetype = "strata",
+    pval.coord = c(5, 0.1)
+)
+gg
+```
+
+
+```{r, fig.asp = 1}
+inflamm_vs_ccr2_df <- hnsc_out$gsva_wide %>% 
+    mutate(PATIENT_ID = str_sub(name, end = -4)) %>% 
+    filter(PATIENT_ID %in% hnsc_out$data_clinical_patient$PATIENT_ID) %>% 
+    mutate(inflamm_vs_ccr2 = Inflamm - Ccr2) %>% 
+    dplyr::select(PATIENT_ID, inflamm_vs_ccr2) %>% 
+    mutate(ratio_quartiles = case_when(
+        inflamm_vs_ccr2 > quantile(inflamm_vs_ccr2, 0.75) ~ ">Q3", 
+        inflamm_vs_ccr2 > quantile(inflamm_vs_ccr2, 0.5) ~ "Q2-Q3", 
+        inflamm_vs_ccr2 > quantile(inflamm_vs_ccr2, 0.25) ~ "Q1-Q2", 
+        TRUE ~ "<Q1"
+    )) %>% 
+    mutate(ratio_quartiles = factor(ratio_quartiles, levels = c("<Q1", "Q1-Q2", "Q2-Q3", ">Q3")))
+
+os_fit <- survfit(
+    Surv(OS_MONTHS, OS_STATUS) ~ ratio_quartiles,
+    data = hnsc_out$data_clinical_patient %>%
+        mutate(OS_STATUS = as.integer(str_extract(OS_STATUS, "."))) %>%
+        left_join(inflamm_vs_ccr2_df, by = "PATIENT_ID")
+)
+gg <- ggsurvplot(
+    os_fit,
+    ncensor.plot = FALSE,
+    pval = TRUE,
+    conf.int = FALSE,
+    risk.table = TRUE,
+    risk.table.col = "strata",
+    linetype = "strata",
+    pval.coord = c(5, 0.1), 
+    palette = brewer.pal(4, "Blues")
+)
+gg
+```
+
+## BRCA, Breast invasive carcinoma
+
+```{r}
+brca_dir <- here("data", "TCGA_pan_can_atlas_2018", "brca_tcga_pan_can_atlas_2018")
+brca_out <- read_in_TCGA(brca_dir)
+gsva_out <- run_or_readRDS(
+    file.path(results_dir, "ssGSEA_myeloid_scRNAseq_signatures_200_BRCA.rds"), 
+    function() {
+        run_gsva(brca_out$mouse_tpm_mtx, c(gs_list$`200`, monocyte_specific_gs_list))
+    }
+)
+brca_out$gsva_wide <- gsva_out %>% 
+    pivot_longer(cols = 2:ncol(.)) %>% 
+    group_by(gs_name) %>% 
+    mutate(scaled_value = as.vector(scale(value))) %>% 
+    pivot_wider(id_cols = name, 
+                names_from = gs_name, 
+                values_from = scaled_value)
+```
+
+## Survival curves
+
+### M2 vs inflamm monocytes
+
+```{r, fig.asp = 1}
+inflamm_vs_M2_df <- brca_out$gsva_wide %>% 
+    mutate(PATIENT_ID = str_sub(name, end = -4)) %>% 
+    filter(PATIENT_ID %in% brca_out$data_clinical_patient$PATIENT_ID) %>% 
+    mutate(inflamm_vs_M2 = Inflammatory_monocytes_vs_rest - M2_macs_vs_rest) %>% 
+    dplyr::select(PATIENT_ID, inflamm_vs_M2) %>% 
+    mutate(ratio_high_vs_low = ifelse(inflamm_vs_M2 > median(inflamm_vs_M2), "high", "low"))
+
+os_fit <- survfit(
+    Surv(OS_MONTHS, OS_STATUS) ~ ratio_high_vs_low,
+    data = brca_out$data_clinical_patient %>%
+        mutate(OS_STATUS = as.integer(str_extract(OS_STATUS, "."))) %>%
+        left_join(inflamm_vs_M2_df, by = "PATIENT_ID")
+)
+gg <- ggsurvplot(
+    os_fit,
+    ncensor.plot = FALSE,
+    pval = TRUE,
+    conf.int = FALSE,
+    risk.table = TRUE,
+    risk.table.col = "strata",
+    linetype = "strata",
+    pval.coord = c(5, 0.1)
+)
+gg
+```
+
+```{r, fig.asp = 1}
+inflamm_vs_M2_df <- brca_out$gsva_wide %>% 
+    mutate(PATIENT_ID = str_sub(name, end = -4)) %>% 
+    filter(PATIENT_ID %in% brca_out$data_clinical_patient$PATIENT_ID) %>% 
+    mutate(inflamm_vs_M2 = Inflammatory_monocytes_vs_rest - M2_macs_vs_rest) %>% 
+    dplyr::select(PATIENT_ID, inflamm_vs_M2) %>% 
+    mutate(ratio_quartiles = case_when(
+        inflamm_vs_M2 > quantile(inflamm_vs_M2, 0.75) ~ ">Q3", 
+        inflamm_vs_M2 > quantile(inflamm_vs_M2, 0.5) ~ "Q2-Q3", 
+        inflamm_vs_M2 > quantile(inflamm_vs_M2, 0.25) ~ "Q1-Q2", 
+        TRUE ~ "<Q1"
+    )) %>% 
+    mutate(ratio_quartiles = factor(ratio_quartiles, levels = c("<Q1", "Q1-Q2", "Q2-Q3", ">Q3")))
+
+os_fit <- survfit(
+    Surv(OS_MONTHS, OS_STATUS) ~ ratio_quartiles,
+    data = brca_out$data_clinical_patient %>%
+        mutate(OS_STATUS = as.integer(str_extract(OS_STATUS, "."))) %>%
+        left_join(inflamm_vs_M2_df, by = "PATIENT_ID")
+)
+gg <- ggsurvplot(
+    os_fit,
+    ncensor.plot = FALSE,
+    pval = TRUE,
+    conf.int = FALSE,
+    risk.table = TRUE,
+    risk.table.col = "strata",
+    linetype = "strata",
+    pval.coord = c(5, 0.1), 
+    palette = brewer.pal(4, "Blues")
+)
+gg
+```
+
+### Inflamm vs Ccr2 monocytes, specific
+
+
+```{r, fig.asp = 1}
+inflamm_vs_ccr2_df <- brca_out$gsva_wide %>% 
+    mutate(PATIENT_ID = str_sub(name, end = -4)) %>% 
+    filter(PATIENT_ID %in% brca_out$data_clinical_patient$PATIENT_ID) %>% 
+    mutate(inflamm_vs_ccr2 = Inflamm - Ccr2) %>% 
+    dplyr::select(PATIENT_ID, inflamm_vs_ccr2) %>% 
+    mutate(ratio_high_vs_low = ifelse(inflamm_vs_ccr2 > median(inflamm_vs_ccr2), "high", "low"))
+
+os_fit <- survfit(
+    Surv(OS_MONTHS, OS_STATUS) ~ ratio_high_vs_low,
+    data = brca_out$data_clinical_patient %>%
+        mutate(OS_STATUS = as.integer(str_extract(OS_STATUS, "."))) %>%
+        left_join(inflamm_vs_ccr2_df, by = "PATIENT_ID")
+)
+gg <- ggsurvplot(
+    os_fit,
+    ncensor.plot = FALSE,
+    pval = TRUE,
+    conf.int = FALSE,
+    risk.table = TRUE,
+    risk.table.col = "strata",
+    linetype = "strata",
+    pval.coord = c(5, 0.1)
+)
+gg
+```
+
+
+```{r, fig.asp = 1}
+inflamm_vs_ccr2_df <- brca_out$gsva_wide %>% 
+    mutate(PATIENT_ID = str_sub(name, end = -4)) %>% 
+    filter(PATIENT_ID %in% brca_out$data_clinical_patient$PATIENT_ID) %>% 
+    mutate(inflamm_vs_ccr2 = Inflamm - Ccr2) %>% 
+    dplyr::select(PATIENT_ID, inflamm_vs_ccr2) %>% 
+    mutate(ratio_quartiles = case_when(
+        inflamm_vs_ccr2 > quantile(inflamm_vs_ccr2, 0.75) ~ ">Q3", 
+        inflamm_vs_ccr2 > quantile(inflamm_vs_ccr2, 0.5) ~ "Q2-Q3", 
+        inflamm_vs_ccr2 > quantile(inflamm_vs_ccr2, 0.25) ~ "Q1-Q2", 
+        TRUE ~ "<Q1"
+    )) %>% 
+    mutate(ratio_quartiles = factor(ratio_quartiles, levels = c("<Q1", "Q1-Q2", "Q2-Q3", ">Q3")))
+
+os_fit <- survfit(
+    Surv(OS_MONTHS, OS_STATUS) ~ ratio_quartiles,
+    data = brca_out$data_clinical_patient %>%
+        mutate(OS_STATUS = as.integer(str_extract(OS_STATUS, "."))) %>%
+        left_join(inflamm_vs_ccr2_df, by = "PATIENT_ID")
+)
+gg <- ggsurvplot(
+    os_fit,
+    ncensor.plot = FALSE,
+    pval = TRUE,
+    conf.int = FALSE,
+    risk.table = TRUE,
+    risk.table.col = "strata",
+    linetype = "strata",
+    pval.coord = c(5, 0.1), 
+    palette = brewer.pal(4, "Blues")
+)
+gg
+```

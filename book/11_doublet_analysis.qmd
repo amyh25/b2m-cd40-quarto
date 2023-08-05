@@ -1,0 +1,156 @@
+---
+title: "Doublet analysis"
+execute: 
+  freeze: true
+  warning: false
+  message: false
+---
+
+```{r}
+library(here)
+source(here("lib", "setup.R"))
+source(here("lib", "helper_Seurat.R"))
+source(here("lib", "helper.R"))
+source(here("lib", "aesthetics.R"))
+```
+
+```{r}
+so_full <- readRDS(file.path(results_dir, "so_filterRNA200mito10.rds"))
+so_T <- readRDS(file.path(results_dir, "so_filterRNA200mito10_subsetTremovedoublets.rds"))
+so_M <- readRDS(file.path(results_dir, "so_filterRNA200mito10_subsetMremovedoublets.rds"))
+```
+
+```{r}
+metadata_full_df <- as_tibble(so_full@meta.data, rownames = "cell") %>%
+    select(cell, general_cell_types)
+metadata_T_df <- as_tibble(so_T@meta.data, rownames = "cell") %>%
+    select(cell, clusters_T, general_T_subtypes)
+metadata_M_df <- as_tibble(so_M@meta.data, rownames = "cell") %>%
+    select(cell, clusters_M, general_M_subtypes)
+
+metadata_df <- metadata_full_df %>%
+    left_join(metadata_T_df, by = "cell") %>%
+    left_join(metadata_M_df, by = "cell")
+
+cluster_df <- metadata_df %>%
+    mutate(subcluster = ifelse(
+        is.na(clusters_T),
+        as.character(clusters_M),
+        as.character(clusters_T)
+    )) %>%
+    mutate(subcluster = case_when(
+        general_cell_types == "Myeloid" & is.na(subcluster) ~ "doublets",
+        general_cell_types == "T/NK" & is.na(subcluster) ~ "doublets",
+        TRUE ~ subcluster
+    ))
+```
+
+```{r}
+doublets <- cluster_df %>% 
+    filter(subcluster == "doublets") %>% 
+    .$cell
+```
+
+```{r}
+
+hto_df <- as_tibble(t(as.matrix(so_full@assays$HTO@data)), rownames = "cell")
+```
+
+
+```{r}
+metadata_to_add <- cluster_df %>% 
+    select(cell, subcluster) %>% 
+    column_to_rownames("cell")
+so_full <- AddMetaData(so_full, metadata = metadata_to_add)
+```
+
+```{r}
+
+plot_df <- get_metadata_from_so(so_full) %>% 
+    mutate(transcriptional_doublets = ifelse(subcluster == "doublets", 
+                                             "myeloid/T\ndoublets", 
+                                             "other\ncells")) %>% 
+    mutate(transcriptional_doublets = ifelse(is.na(transcriptional_doublets), 
+                                             "other\ncells", 
+                                             transcriptional_doublets)) %>% 
+    left_join(hto_df, by = "cell") 
+plot_tidy <- plot_df %>% 
+    pivot_longer(cols = c("nFeature_RNA", "nCount_RNA", "hashtag1", "hashtag2", "hashtag3")) 
+```
+
+
+```{r, fig.width = 10, fig.height = 4}
+plot_tidy %>% 
+    filter(name %in% c("nFeature_RNA", "nCount_RNA")) %>% 
+    ggplot() + 
+    aes(transcriptional_doublets, value) + 
+    geom_violin(scale = "width", draw_quantiles = 0.5) + 
+    facet_wrap(name~sample, scale = "free_y", ncol = 7)
+
+plot_tidy %>% 
+    filter(name %in% c("hashtag1", "hashtag2", "hashtag3")) %>% 
+    ggplot() + 
+    aes(transcriptional_doublets, value) + 
+    geom_violin(scale = "width", draw_quantiles = 0.5) + 
+    facet_wrap(name~sample, scale = "free_y", ncol = 7)
+```
+
+```{r}
+plot_hashtags_for_sample <- function(sample_str, hashtags = c(1, 2)) {
+    p1 <- plot_df %>% 
+        filter(sample == sample_str) %>% 
+        ggplot() + 
+        aes(hashtag1, hashtag2) + 
+        geom_density_2d(aes(color = transcriptional_doublets)) +
+        labs(title = sample_str) + 
+        theme(legend.position = "top", 
+              legend.direction = "vertical")
+    
+    out <- p1
+    
+    if (3 %in% hashtags) {
+        
+        p2 <- plot_df %>% 
+            filter(sample == sample_str) %>% 
+            ggplot() + 
+            aes(hashtag1, hashtag3) + 
+            geom_density_2d(aes(color = transcriptional_doublets)) + 
+            theme(legend.position = "none")
+        
+        p3 <- plot_df %>% 
+            filter(sample == sample_str) %>% 
+            ggplot() + 
+            aes(hashtag2, hashtag3) + 
+            geom_density_2d(aes(color = transcriptional_doublets)) + 
+            theme(legend.position = "none")
+
+        out <- plot_grid(p1, p2, p3, ncol = 3, align = "h")
+    }
+    
+    return(out)
+}
+```
+
+```{r}
+plot_hashtags_for_sample("sample_a1", hashtags = c(1, 2, 3))
+plot_hashtags_for_sample("sample_a4")
+plot_hashtags_for_sample("sample_c1")
+plot_hashtags_for_sample("sample_d1", hashtags = c(1, 2, 3))
+plot_hashtags_for_sample("sample_d4")
+plot_hashtags_for_sample("sample_f1")
+plot_hashtags_for_sample("sample_f3")
+
+```
+
+```{r}
+plot_df %>%
+    mutate(subcluster = ifelse(is.na(subcluster), general_cell_types, subcluster)) %>% 
+    ggplot() +
+    aes(subcluster, nFeature_RNA, fill = subcluster == "doublets") +
+    geom_violin(scale = "width", draw_quantiles = 0.5) + 
+    coord_flip()
+```
+
+
+
+
