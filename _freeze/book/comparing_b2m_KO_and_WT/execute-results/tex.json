@@ -1,0 +1,20 @@
+{
+  "hash": "5c08ad47acb9a91484a128ef9aaae177",
+  "result": {
+    "markdown": "---\ntitle: \"Comparing B2m KO and WT\"\nexecute: \n  freeze: auto \n  warning: false\n  message: false\n---\n\n::: {.cell}\n\n:::\n\n\n\n## Myeloid subset\n\n\n\n::: {.cell}\n\n:::\n\n\n\n### Pseudobulk\n\n\n\n::: {.cell}\n\n:::\n\n::: {.cell}\n::: {.cell-output-display}\n![](comparing_b2m_KO_and_WT_files/figure-pdf/unnamed-chunk-4-1.pdf)\n:::\n:::\n\n::: {.cell}\n\n:::\n\n::: {.cell}\n\n:::\n\n::: {.cell}\n::: {.cell-output-display}\n![](comparing_b2m_KO_and_WT_files/figure-pdf/unnamed-chunk-7-1.pdf)\n:::\n:::\n\n::: {.cell}\n::: {.cell-output-display}\n![](comparing_b2m_KO_and_WT_files/figure-pdf/unnamed-chunk-8-1.pdf)\n:::\n:::\n\n::: {.cell}\n\n:::\n\n\n\n### Single cell\n\n\n\n::: {.cell}\n\n:::\n\n::: {.cell}\n::: {.cell-output-display}\n![](comparing_b2m_KO_and_WT_files/figure-pdf/unnamed-chunk-11-1.pdf)\n:::\n:::\n\n::: {.cell}\n::: {.cell-output-display}\n![](comparing_b2m_KO_and_WT_files/figure-pdf/unnamed-chunk-12-1.pdf)\n:::\n:::\n\n::: {.cell}\n::: {.cell-output-display}\n![](comparing_b2m_KO_and_WT_files/figure-pdf/unnamed-chunk-13-1.pdf)\n:::\n:::\n\n\n\n### Compare pseudobulk and single cell\n\n\n\n::: {.cell}\n\n:::\n\n::: {.cell fig.asp='1'}\n::: {.cell-output-display}\n![](comparing_b2m_KO_and_WT_files/figure-pdf/unnamed-chunk-15-1.pdf)\n:::\n:::\n\n::: {.cell}\n::: {.cell-output-display}\n![](comparing_b2m_KO_and_WT_files/figure-pdf/unnamed-chunk-16-1.pdf)\n:::\n:::\n\n\n\n## ssGSEA\n\n\n\n::: {.cell}\n\n:::\n\n::: {.cell}\n\n:::\n\n::: {.cell}\n\n:::\n",
+    "supporting": [
+      "comparing_b2m_KO_and_WT_files/figure-pdf"
+    ],
+    "filters": [
+      "rmarkdown/pagebreak.lua"
+    ],
+    "includes": {},
+    "engineDependencies": {
+      "knitr": [
+        "{\"type\":\"list\",\"attributes\":{},\"value\":[]}"
+      ]
+    },
+    "preserve": null,
+    "postProcess": false
+  }
+}

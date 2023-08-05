@@ -1,0 +1,20 @@
+{
+  "hash": "6a384ed4be52da6e62aa94f39b002137",
+  "result": {
+    "markdown": "---\ntitle: \"Doublet analysis\"\nexecute: \n  freeze: true\n  warning: false\n  message: false\n---\n\n::: {.cell}\n\n:::\n\n::: {.cell}\n\n:::\n\n::: {.cell}\n\n:::\n\n::: {.cell}\n\n:::\n\n::: {.cell}\n\n:::\n\n::: {.cell}\n\n:::\n\n::: {.cell}\n\n:::\n\n::: {.cell}\n::: {.cell-output-display}\n![](11_doublet_analysis_files/figure-pdf/unnamed-chunk-8-1.pdf)\n:::\n\n::: {.cell-output-display}\n![](11_doublet_analysis_files/figure-pdf/unnamed-chunk-8-2.pdf)\n:::\n:::\n\n::: {.cell}\n\n:::\n\n::: {.cell}\n::: {.cell-output-display}\n![](11_doublet_analysis_files/figure-pdf/unnamed-chunk-10-1.pdf)\n:::\n\n::: {.cell-output-display}\n![](11_doublet_analysis_files/figure-pdf/unnamed-chunk-10-2.pdf)\n:::\n\n::: {.cell-output-display}\n![](11_doublet_analysis_files/figure-pdf/unnamed-chunk-10-3.pdf)\n:::\n\n::: {.cell-output-display}\n![](11_doublet_analysis_files/figure-pdf/unnamed-chunk-10-4.pdf)\n:::\n\n::: {.cell-output-display}\n![](11_doublet_analysis_files/figure-pdf/unnamed-chunk-10-5.pdf)\n:::\n\n::: {.cell-output-display}\n![](11_doublet_analysis_files/figure-pdf/unnamed-chunk-10-6.pdf)\n:::\n\n::: {.cell-output-display}\n![](11_doublet_analysis_files/figure-pdf/unnamed-chunk-10-7.pdf)\n:::\n:::\n\n::: {.cell}\n::: {.cell-output-display}\n![](11_doublet_analysis_files/figure-pdf/unnamed-chunk-11-1.pdf)\n:::\n:::\n",
+    "supporting": [
+      "11_doublet_analysis_files/figure-pdf"
+    ],
+    "filters": [
+      "rmarkdown/pagebreak.lua"
+    ],
+    "includes": {},
+    "engineDependencies": {
+      "knitr": [
+        "{\"type\":\"list\",\"attributes\":{},\"value\":[]}"
+      ]
+    },
+    "preserve": null,
+    "postProcess": false
+  }
+}

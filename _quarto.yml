@@ -1,0 +1,55 @@
+project:
+  type: book
+  output-dir: _book
+
+book:
+  title: "B2m CD40 analysis"
+  author: "Amy Huang"
+  description: "Analysis for the B2m CD40 project"
+  page-navigation: true
+  chapters:
+    - index.qmd
+    - part: "Single cell analysis"
+      chapters:
+      - book/setup_sc.qmd
+      - book/00_seurat_init.qmd
+      - book/01_general_cell_types.qmd
+      - book/02_t_cells.qmd
+      - book/03_myeloid_cells.qmd
+      - book/04_myeloid_cells_remove_T_doublets.qmd
+      - book/05_lymphoid_cells_remove_M_doublets.qmd
+      - book/06_gdT.qmd
+      - book/07_NK_cells.qmd
+      - book/08_run_vision.qmd
+      # - book/09_ifng.qmd
+      - book/10_pb.qmd
+      - book/11_doublet_analysis.qmd
+      - book/comparing_b2m_KO_and_WT.qmd
+      - book/figures.qmd
+    - part: "TCGA analysis"
+      chapters:
+      - book/setup_tcga.qmd
+      - book/12_inflammatory_monocyte_signature.qmd
+      - book/13_prelim_tcga_analysis.qmd
+      - book/14_full_tcga_analysis.qmd
+      - book/15_other_clinical_signatures.qmd
+    - part: "Clinical bulk RNA-seq analysis"
+    - part: "Miscellaneous"
+      chapters:
+      - book/export-proportions.qmd
+
+format:
+  html:
+    toc: true
+    toc_float: true
+    theme: cosmo
+    code-fold: true
+    code-tools: true
+    code-link: true
+    highlight: tango
+  pdf:
+    toc: true
+    execute:
+      echo: false
+
+editor: source
