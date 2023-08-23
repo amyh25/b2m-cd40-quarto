@@ -4,6 +4,7 @@ execute:
   freeze: auto 
   warning: false
   message: false
+  
 ---
 
 ```{r}
@@ -18,6 +19,7 @@ library(DT)
 library(plotly)
 
 TEXT_SIZE <- 12
+
 ```
 
 ## Myeloid subset

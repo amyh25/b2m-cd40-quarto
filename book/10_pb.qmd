@@ -44,6 +44,8 @@ cells <- mac_metadata_df %>%
 so_down <- subset(so, cells = cells)
 ```
 
+## Split by treatment
+
 ```{r}
 so_down <- AddMetaData(
     so_down,
@@ -116,7 +118,7 @@ pca_loadings %>%
     arrange(PC1)
 ```
 
-## GSEA
+### GSEA
 
 ```{r}
 sig_dir <- here("data", "signatures")
@@ -240,7 +242,7 @@ p_ticks <- leg_df %>%
 plot_grid(p_curve, p_ticks, ncol = 1, align = "v", axis = "lr", rel_heights = c(3, 1))
 ```
 
-## PC loading heatmaps
+### PC loading heatmaps
 
 
 ```{r mean_scaled_norm_counts}
@@ -311,6 +313,51 @@ Heatmap(
     right_annotation = ha
 )
 ```
+
+## Split by genotype
+
+```{r}
+so <- AddMetaData(
+    so,
+    metadata = so@meta.data %>%
+        mutate(mouse_no_underscore = str_replace_all(mouse, "_", ".")) %>%
+        select(mouse_no_underscore)
+)
+out <- run_or_readRDS(file.path(results_dir, "pb_macs_split_genotype.rds"),
+                      function() {
+                          pb_list <-
+                              make_pseudobulk(so, "genotype", "mouse_no_underscore", "treatment")
+                          deseq_list <-
+                              map(pb_list,
+                                  ~ pb_to_deseq(..1, sample_var = "genotype", vars = "treatment"))
+                          rlog_list <- map(deseq_list, rlog, blind = TRUE)
+                          return(list(pb_list, deseq_list, rlog_list))
+                      })
+pb_list <- out[[1]]
+deseq_list <- out[[2]]
+rlog_list <- out[[3]]
+```
+
+```{r}
+plotPCA(rlog_list$`B2m KO`, ntop = 2321, intgroup = "treatment")
+```
+
+```{r}
+# dge_pb_b2m_cd40_vs_iso <- 
+#   results(deseq_list$`B2m KO`, contrast = c("treatment", "CD40 agonist", "Isotype")) %>% 
+#   as_tibble(rownames = "gene")
+# write_tsv(dge_pb_b2m_cd40_vs_iso, file.path(results_dir, "dge_pb_b2m_macs_cd40_vs_iso.tsv"))
+# 
+# ranked_list <- dge_pb_b2m_cd40_vs_iso %>% 
+#   arrange(desc(log2FoldChange)) %>% 
+#   {set_names(.$log2FoldChange, .$gene)}
+# ifng_gs_df <- msigdbr::msigdbr(species = "Mus musculus", category = "H") %>% 
+#   filter(gs_name == "HALLMARK_INTERFERON_GAMMA_RESPONSE")
+# gsea(values = ranked_list, 
+#      geneset = ifng_gs_df$gene_symbol, 
+#      power = 0)
+```
+
 
 # Pseudobulk all populations
 

@@ -1,0 +1,196 @@
+---
+title: "Comparing CD40 and isotype within B2m KO"
+execute: 
+  freeze: auto 
+  warning: false
+  message: false
+---
+
+```{r}
+library(here)
+source(here("lib", "setup.R"))
+source(here("lib", "helper_Seurat.R"))
+source(here("lib", "helper.R"))
+source(here("lib", "aesthetics.R"))
+library(DESeq2)
+library(liger)
+library(DT)
+library(plotly)
+
+TEXT_SIZE <- 12
+```
+
+## Myeloid subset
+
+```{r}
+so_M <- readRDS(file.path(results_dir, "so_filterRNA200mito10_subsetMremovedoublets.rds"))
+```
+
+### Pseudobulk
+
+```{r}
+so_b2m_M <- subset(so_M %>% set_idents("genotype"), idents = "B2m KO")
+so_b2m_M <- AddMetaData(
+    so_b2m_M,
+    metadata = so_b2m_M@meta.data %>%
+        mutate(mouse_no_underscore = str_replace_all(mouse, "_", ".")) %>%
+        select(mouse_no_underscore)
+)
+```
+
+```{r}
+get_metadata_from_so(so_b2m_M) %>% 
+  plot_umap(color_str = "general_M_subtypes", label = T)
+
+so_b2m_M <- AddMetaData(
+    so_b2m_M,
+    metadata = so_b2m_M@meta.data %>%
+      mutate(general_M_subtypes_grouped = case_when(
+        general_M_subtypes %in% c("MDSC", "Proliferating", "Macrophages", "Monocytes") ~ "Mac/mono", 
+        TRUE ~ general_M_subtypes
+      )) %>% 
+      dplyr::select(general_M_subtypes_grouped)
+)
+```
+
+```{r}
+out <- run_or_readRDS(
+  file.path(results_dir, "pb_b2m_Mgrouped.rds"),
+  function() {
+    pb_list <-
+      make_pseudobulk(so_b2m_M, "general_M_subtypes_grouped", "mouse_no_underscore", "treatment")
+    deseq_list <-
+      map(pb_list,
+          ~ pb_to_deseq(..1, sample_var = "general_M_subtypes_grouped", vars = "treatment"))
+    rlog_list <-
+      map(deseq_list, rlog, blind = TRUE)
+    return(list(pb_list, deseq_list, rlog_list))
+  }
+)
+
+pb_list <- out[[1]]
+deseq_list <- out[[2]]
+rlog_list <- out[[3]]
+```
+
+```{r}
+norm_counts <- counts(deseq_list$`Mac/mono`, normalized = TRUE) %>%
+      as_tibble(rownames = "gene")
+saveRDS(norm_counts, file.path(results_dir, "pb_iso_macs_norm_counts.rds"))
+```
+
+```{r}
+results(deseq_list$`Mac/mono`) %>% 
+  as_tibble(rownames = "gene") %>% 
+  filter(log2FoldChange > 0) %>% 
+  arrange(padj) %>% 
+  filter(str_detect(gene, "Rpl|Rps", negate = TRUE)) %>% 
+  datatable()
+```
+
+```{r}
+results(deseq_list$`Mac/mono`) %>% 
+  as_tibble(rownames = "gene") %>% 
+  filter(log2FoldChange < 0) %>% 
+  arrange(padj) %>% 
+  filter(str_detect(gene, "Rpl|Rps", negate = TRUE)) %>% 
+  datatable()
+```
+
+```{r}
+pb_dge_df <- results(deseq_list$`Mac/mono`) %>% 
+  as_tibble(rownames = "gene") 
+write_tsv(pb_dge_df, file.path(results_dir, "dge_pb_b2m_macs_cd40.v.iso.tsv"))
+```
+
+```{r}
+pb_dge_df %>% 
+  filter(padj < 0.05) %>% 
+  arrange(desc(log2FoldChange)) %>% 
+  head(10)
+```
+
+
+## All
+
+```{r}
+so <- readRDS(file.path(results_dir, "so_filterRNA200mito10.rds"))
+```
+
+### Pseudobulk
+
+```{r}
+so_b2m <- subset(so %>% set_idents("genotype"), idents = "B2m KO")
+so_b2m <- AddMetaData(
+  so_b2m,
+  metadata = so_b2m@meta.data %>%
+    mutate(mouse_no_underscore = str_replace_all(mouse, "_", ".")) %>%
+    select(mouse_no_underscore)
+)
+```
+
+```{r}
+get_metadata_from_so(so_b2m) %>% 
+  plot_umap(color_str = "general_cell_types", label = T)
+
+so_b2m <- AddMetaData(
+  so_b2m,
+  metadata = so_b2m@meta.data %>%
+    mutate(is_immune = ifelse(general_cell_types %in% c("B", "Myeloid", "T/NK"), 
+                              "immune", 
+                              "not immune")) %>%
+    select(is_immune)
+)
+```
+
+```{r}
+out <- run_or_readRDS(
+  file.path(results_dir, "pb_b2m_all.rds"),
+  function() {
+    pb_list <-
+      make_pseudobulk(so_b2m, "is_immune", "mouse_no_underscore", "treatment")
+    deseq_list <-
+      map(pb_list,
+          ~ pb_to_deseq(..1, sample_var = "is_immune", vars = "treatment"))
+    rlog_list <-
+      map(deseq_list, rlog, blind = TRUE)
+    return(list(pb_list, deseq_list, rlog_list))
+  }
+)
+
+pb_list <- out[[1]]
+deseq_list <- out[[2]]
+rlog_list <- out[[3]]
+```
+
+```{r}
+results(deseq_list$immune) %>% 
+  as_tibble(rownames = "gene") %>% 
+  filter(log2FoldChange > 0) %>% 
+  arrange(padj) %>% 
+  filter(str_detect(gene, "Rpl|Rps", negate = TRUE)) %>% 
+  datatable()
+```
+
+```{r}
+results(deseq_list$immune) %>% 
+  as_tibble(rownames = "gene") %>% 
+  filter(log2FoldChange < 0) %>% 
+  arrange(padj) %>% 
+  filter(str_detect(gene, "Rpl|Rps", negate = TRUE)) %>% 
+  datatable()
+```
+
+```{r}
+pb_dge_df <- results(deseq_list$immune) %>% 
+  as_tibble(rownames = "gene") 
+write_tsv(pb_dge_df, file.path(results_dir, "dge_pb_b2m_all_cd40.v.iso.tsv"))
+```
+
+```{r}
+pb_dge_df %>% 
+  filter(padj < 0.05) %>% 
+  arrange(desc(log2FoldChange)) %>% 
+  head(10)
+```
+

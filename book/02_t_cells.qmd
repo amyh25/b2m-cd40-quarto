@@ -1,6 +1,6 @@
 ---
 execute: 
-  freeze: true
+  freeze: true 
   message: false
   warning: false
 ---
@@ -25,6 +25,7 @@ cluster_ann_df <- readxl::read_excel(file.path(results_dir, "cluster_annotations
     mutate(cluster_ID_name = paste0(cluster, ": ", cluster_ID))
 
 cluster_ID_grouped_key <- cluster_ann_df$cluster_ID_grouped %>% set_names(cluster_ann_df$cluster)
+palette_T_w_doublets <- set_names(cluster_ann_df$color, cluster_ann_df$cluster_ID_grouped)
 ```
 
 ```{r}
@@ -61,6 +62,12 @@ get_metadata_from_so(so) %>%
               pointsize = 1.1)
 ```
 
+```{r umap_t_wdoublets}
+get_metadata_from_so(so) %>%
+  plot_umap(color_str = "general_T_subtypes",
+            pointsize = 1.1) +
+  scale_color_manual(values = palette_T_w_doublets)
+```
 
 # Identify proper clustering
 
