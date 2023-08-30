@@ -368,6 +368,8 @@ metadata_all %>%
     labs(x = "UMAP dim. 1", y = "UMAP dim. 2")
 ```
 
+## Proportion of immune cells
+
 ```{r prop_df}
 genotype_treatment_mouse_key_df <- metadata_all %>%
     select(genotype, treatment, mouse) %>%
@@ -625,7 +627,7 @@ p_stackedbar_t <- prop_t_df %>%
 p_stackedbar_t
 ```
 
-### ifng in lymphocytes
+### ifng in lymphocytes, grouped
 
 ```{r}
 ifng_df <- get_metadata_from_so(so_T, genes = c("Ifng")) %>% 
@@ -716,6 +718,107 @@ plot_df %>%
           legend.direction = "vertical", 
           legend.title = element_blank()) +
     labs(y = "Mean log-normalized Ifng")
+```
+
+### ifng in lymphocytes, NOT grouped
+
+8/29/2023, Brian thought that explaining the groups may be too much? So we're just going to go with the cluster names. 
+
+```{r}
+ifng_df <- get_metadata_from_so(so_T, genes = c("Ifng")) %>%
+  filter(genotype == "B2m KO") %>%
+  filter(!(clusters_T %in% c("9: IFN-sensing T", "10: gdT and ILC2"))) %>% 
+  mutate(treatment = factor(treatment, levels = c("Isotype", "CD40 agonist"))) %>% 
+  mutate(clusters_T = factor(clusters_T, levels = sort(as.character(unique(clusters_T)))))
+plot_df <- ifng_df %>%
+  group_by(clusters_T, mouse, group, treatment) %>%
+  summarise(mean_ifng = mean(Ifng)) %>%
+  ungroup()
+dist_df <- plot_df %>%
+  group_by(treatment, clusters_T) %>%
+  summarise(
+    mean_mean_ifng = mean(mean_ifng),
+    sd_mean_ifng = sd(mean_ifng),
+    se_mean_ifng = sd_mean_ifng / sqrt(n()),
+    ymin = mean_mean_ifng - se_mean_ifng,
+    ymax = mean_mean_ifng + se_mean_ifng
+  )
+t_out <- plot_df %>%
+  group_by(clusters_T) %>%
+  summarise(out = broom::tidy(t.test(mean_ifng ~ treatment))) %>%
+  unnest(cols = out) %>%
+  mutate(p_BH = p.adjust(p.value, method = "BH")) %>%
+  mutate_signif_levels(p_BH) 
+```
+
+
+```{r, fig.width = 6, fig.height = 3}
+plot_df %>%
+  ggplot() +
+  aes(treatment, mean_ifng) +
+  geom_errorbar(
+    aes(
+      ymin = mean_mean_ifng,
+      ymax = mean_mean_ifng,
+      y = NULL,
+      color = treatment
+    ),
+    data = dist_df,
+    width = 0.5,
+    size = 0.2
+  ) +
+  geom_errorbar(
+    aes(
+      ymin = ymin,
+      ymax = ymax,
+      y = NULL,
+      color = treatment
+    ),
+    data = dist_df,
+    width = 0.3,
+    size = 0.2
+  ) +
+  geom_jitter(
+    aes(color = treatment),
+    shape = 21,
+    fill = "white",
+    size = 1,
+    width = 0.2
+  ) +
+  geom_text(
+    aes(x = 1.5, label = signif),
+    data = ~ ..1 %>%
+      group_by(clusters_T) %>%
+      summarise(mean_ifng = max(mean_ifng) + 0.15) %>%
+      left_join(t_out, by = "clusters_T") 
+  ) +
+  geom_segment(
+    aes(x = 1, xend = 2, yend = mean_ifng),
+    data = ~ ..1 %>%
+      group_by(clusters_T) %>%
+      summarise(mean_ifng = max(mean_ifng) + 0.1) %>%
+      left_join(t_out, by = "clusters_T") %>%
+      filter(signif != "") 
+  ) +
+  facet_wrap( ~ clusters_T, ncol = 20, strip.position = "bottom") +
+  scale_y_continuous(expand = c(0, 0), limits = ~ c(-0.005, ..1[2])) +
+  remove_x_spine() +
+  scale_color_manual(values = palette_treatment) +
+  scale_fill_manual(values = palette_treatment) +
+  theme(
+    axis.text.x = element_blank(),
+    axis.title.x = element_blank(),
+    strip.text.x = element_text(
+      angle = 90,
+      hjust = 1,
+      vjust = 0.5
+    ),
+    panel.spacing = unit(1, "lines"),
+    legend.position = c(0.65, 0.9),
+    legend.direction = "vertical",
+    legend.title = element_blank()
+  ) +
+  labs(y = "Mean log-normalized Ifng")
 ```
 
 ### ifng response in ALL
@@ -1065,6 +1168,44 @@ metadata_M_vision %>%
     labs(x = "Clusters", y = "Ifng response score (VISION)")
 ```
 
+### With T/NK cells too
+
+```{r, fig.width = 3, fig.height = 2.5}
+metadata_TNK_vision <- get_metadata_from_so(so_T) %>%
+  left_join(vision_list$Lexh, by = "cell")
+metadata_vision <- metadata_M_vision %>%
+  bind_rows(metadata_TNK_vision) %>% 
+  mutate(clusters = ifelse(is.na(clusters_M), as.character(clusters_T), as.character(clusters_M))) 
+avg_ifngr_df <- metadata_vision %>% 
+  group_by(clusters) %>%
+  summarise(avg_ifng_response = median(HALLMARK_INTERFERON_GAMMA_RESPONSE)) %>%
+  arrange(desc(avg_ifng_response))
+metadata_vision %>%
+  mutate(clusters = factor(clusters, levels = avg_ifngr_df$clusters)) %>%
+  ggplot() +
+  aes(clusters, HALLMARK_INTERFERON_GAMMA_RESPONSE) +
+  geom_violin(
+    aes(fill = clusters),
+    draw_quantiles = 0.5,
+    scale = "width",
+    size = 0.25
+  ) +
+  scale_fill_manual(values = c(palette_cluster_M, palette_cluster_T)) +
+  remove_x_spine() +
+  scale_y_continuous(expand = c(0, 0), limits = ~c(..1[1], ..1[2]*1.2)) +
+  theme(legend.position = "none",
+        axis.text.x = element_text(
+          angle = 90,
+          hjust = 1,
+          vjust = 0.5
+        )) +
+  labs(x = "Clusters", y = "Ifng response score (VISION)") + 
+  stat_compare_means(comparisons = list(c("7: inflammatory monocyte", "10: migratory DC")), 
+                     method = "t.test", 
+                     label = "p.signif", 
+                     size = 3)
+```
+
 ## Influx of CD40 specific macs in B2m KO
 
 ```{r myeloid prop_df}
@@ -1179,6 +1320,10 @@ prop_df %>%
 ```
 
 # Figure 5
+
+For the panels in figure 5, please see the earlier section labelled "Full TCGA Analysis" and "Compare Monocyte Signature to Others"
+
+<!-- TODO: figure out how to implement references in quarto.  -->
 
 # Supplementary scRNAseq figure
 
