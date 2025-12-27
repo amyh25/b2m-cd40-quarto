@@ -1,4 +1,5 @@
 # other ignores
+data
 renv
 previous_books
 _book
