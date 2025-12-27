@@ -6,7 +6,7 @@ execute:
   message: false
 ---
 
-```{r}
+```{r, message = FALSE}
 library(here)
 source(here("lib", "setup.R"))
 source(here("lib", "helper_Seurat.R"))

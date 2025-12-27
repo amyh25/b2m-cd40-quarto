@@ -9,7 +9,7 @@ execute:
 
 First, we'll read run our setup script, which will define paths and load in the necessary libraries. 
 
-```{r}
+```{r, message = FALSE}
 library(here)
 source(here("lib", "setup.R"))
 source(here("lib", "helper.R"))

@@ -20,7 +20,7 @@ library(plotly)
 TEXT_SIZE <- 12
 ```
 
-## Myeloid subset
+## Myeloid subsets
 
 ```{r}
 so_M <- readRDS(file.path(results_dir, "so_filterRNA200mito10_subsetMremovedoublets.rds"))
@@ -79,7 +79,7 @@ norm_counts <- counts(deseq_list$`Mac/mono`, normalized = TRUE) %>%
 saveRDS(norm_counts, file.path(results_dir, "pb_iso_macs_norm_counts.rds"))
 ```
 
-```{r}
+```{r, eval = F}
 results(deseq_list$`Mac/mono`) %>% 
   as_tibble(rownames = "gene") %>% 
   filter(log2FoldChange > 0) %>% 
@@ -88,7 +88,7 @@ results(deseq_list$`Mac/mono`) %>%
   datatable()
 ```
 
-```{r}
+```{r, eval = FALSE}
 results(deseq_list$`Mac/mono`) %>% 
   as_tibble(rownames = "gene") %>% 
   filter(log2FoldChange < 0) %>% 
@@ -110,6 +110,167 @@ pb_dge_df %>%
   head(10)
 ```
 
+#### Heatmap visualization of mac/mono only
+
+```{r}
+dge_cd40.v.iso <- pb_dge_df
+
+topn <- 100
+top_n_genes <- dge_cd40.v.iso %>% 
+  filter(log2FoldChange > 0) %>% 
+  arrange(padj) %>% 
+  head(topn) %>% 
+  .$gene
+bot_n_genes <- dge_cd40.v.iso %>% 
+  filter(log2FoldChange < 0) %>% 
+  arrange(padj) %>% 
+  head(topn) %>% 
+  .$gene
+```
+
+```{r, fig.width = 3, fig.height = 5}
+h_mtx <- norm_counts %>% 
+  filter(gene %in% top_n_genes | gene %in% bot_n_genes) %>% 
+  mutate(gene = factor(gene, levels = c(top_n_genes, rev(bot_n_genes)))) %>% 
+  arrange(gene) %>% 
+  column_to_rownames("gene") %>% 
+  as.matrix() %>% 
+  t() %>% 
+  scale() %>% 
+  t()
+Heatmap(h_mtx, 
+        cluster_rows = FALSE, 
+        name = "scaled expr.",
+        show_row_names = FALSE)
+```
+
+## all myeloid
+
+### Pseudobulk
+
+```{r}
+so_b2m_M <- subset(so_M %>% set_idents("genotype"), idents = "B2m KO")
+so_b2m_M <- AddMetaData(
+    so_b2m_M,
+    metadata = so_b2m_M@meta.data %>%
+        mutate(mouse_no_underscore = str_replace_all(mouse, "_", ".")) %>%
+        select(mouse_no_underscore)
+)
+```
+
+```{r}
+pb_M <- make_pseudobulk(so_b2m_M,
+                       split_var = NULL,
+                       sample_var = "mouse_no_underscore",
+                       vars = "treatment")
+deseq_M <- pb_to_deseq(pb_M, sample_var = "mouse_no_underscore", vars = "treatment")
+rlog_M <- rlog(deseq_M, blind = TRUE)
+norm_counts_M <- counts(deseq_M, normalized = TRUE) %>%
+  as_tibble(rownames = "gene")
+pb_M_dge_df <- results(deseq_M, name = "treatment_Isotype_vs_CD40.agonist") %>% 
+  as_tibble(rownames = "gene") 
+write_tsv(pb_M_dge_df, file.path(results_dir, "dge_pb_b2m_all-myeloid_cd40.v.iso.tsv"))
+```
+
+#### Heatmap visualization
+
+```{r}
+dge_cd40.v.iso <- pb_M_dge_df
+
+topn <- 100
+top_n_genes <- dge_cd40.v.iso %>% 
+  filter(log2FoldChange > 0) %>% 
+  arrange(padj) %>% 
+  head(topn) %>% 
+  .$gene
+bot_n_genes <- dge_cd40.v.iso %>% 
+  filter(log2FoldChange < 0) %>% 
+  arrange(padj) %>% 
+  head(topn) %>% 
+  .$gene
+```
+
+```{r, fig.width = 3, fig.height = 5}
+h_mtx <- norm_counts %>% 
+  filter(gene %in% top_n_genes | gene %in% bot_n_genes) %>% 
+  mutate(gene = factor(gene, levels = c(top_n_genes, rev(bot_n_genes)))) %>% 
+  arrange(gene) %>% 
+  column_to_rownames("gene") %>% 
+  as.matrix() %>% 
+  t() %>% 
+  scale() %>% 
+  t()
+Heatmap(h_mtx, 
+        cluster_rows = FALSE, 
+        name = "scaled expr.",
+        show_row_names = FALSE)
+```
+
+## lymphocyte subset
+
+```{r}
+so_T <- readRDS(file.path(results_dir, "so_filterRNA200mito10_subsetTremovedoublets.rds"))
+```
+
+### Pseudobulk
+
+```{r}
+so_b2m_T <- subset(so_T %>% set_idents("genotype"), idents = "B2m KO")
+so_b2m_T <- AddMetaData(
+    so_b2m_T,
+    metadata = so_b2m_T@meta.data %>%
+        mutate(mouse_no_underscore = str_replace_all(mouse, "_", ".")) %>%
+        select(mouse_no_underscore)
+)
+```
+
+```{r}
+pb_T <- make_pseudobulk(so_b2m_T,
+                       split_var = NULL,
+                       sample_var = "mouse_no_underscore",
+                       vars = "treatment")
+deseq_T <- pb_to_deseq(pb_T, sample_var = "mouse_no_underscore", vars = "treatment")
+rlog_T <- rlog(deseq_T, blind = TRUE)
+norm_counts_T <- counts(deseq_T, normalized = TRUE) %>%
+  as_tibble(rownames = "gene")
+pb_T_dge_df <- results(deseq_T, name = "treatment_Isotype_vs_CD40.agonist") %>% 
+  as_tibble(rownames = "gene") 
+write_tsv(pb_T_dge_df, file.path(results_dir, "dge_pb_b2m_all-lymphocyte_cd40.v.iso.tsv"))
+```
+
+#### Heatmap visualization
+
+```{r}
+dge_cd40.v.iso <- pb_T_dge_df
+
+topn <- 100
+top_n_genes <- dge_cd40.v.iso %>% 
+  filter(log2FoldChange > 0) %>% 
+  arrange(padj) %>% 
+  head(topn) %>% 
+  .$gene
+bot_n_genes <- dge_cd40.v.iso %>% 
+  filter(log2FoldChange < 0) %>% 
+  arrange(padj) %>% 
+  head(topn) %>% 
+  .$gene
+```
+
+```{r, fig.width = 3, fig.height = 5}
+h_mtx <- norm_counts %>% 
+  filter(gene %in% top_n_genes | gene %in% bot_n_genes) %>% 
+  mutate(gene = factor(gene, levels = c(top_n_genes, rev(bot_n_genes)))) %>% 
+  arrange(gene) %>% 
+  column_to_rownames("gene") %>% 
+  as.matrix() %>% 
+  t() %>% 
+  scale() %>% 
+  t()
+Heatmap(h_mtx, 
+        cluster_rows = FALSE, 
+        name = "scaled expr.",
+        show_row_names = FALSE)
+```
 
 ## All
 
@@ -163,7 +324,7 @@ deseq_list <- out[[2]]
 rlog_list <- out[[3]]
 ```
 
-```{r}
+```{r, eval = FALSE}
 results(deseq_list$immune) %>% 
   as_tibble(rownames = "gene") %>% 
   filter(log2FoldChange > 0) %>% 
@@ -172,7 +333,7 @@ results(deseq_list$immune) %>%
   datatable()
 ```
 
-```{r}
+```{r, eval = FALSE}
 results(deseq_list$immune) %>% 
   as_tibble(rownames = "gene") %>% 
   filter(log2FoldChange < 0) %>% 

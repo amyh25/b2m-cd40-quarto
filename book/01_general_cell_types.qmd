@@ -5,7 +5,7 @@ execute:
   warning: false
 ---
 
-```{r}
+```{r, message = FALSE}
 library(here)
 source(here("lib", "setup.R"))
 source(here("lib", "helper_Seurat.R"))
@@ -64,7 +64,7 @@ write_csv(markers_readable, file.path(results_dir, "so_filterRNA200mito10_marker
 
 # Assign clusters
 
-```{r}
+```{r, message = F}
 cluster_ann_df <- readxl::read_excel(file.path(results_dir, "cluster_annotations.xlsx")) %>% 
     tidyr::fill(Subset, clustering) %>% 
     filter(Subset == "so_filterRNA200mito10.rds") %>% 

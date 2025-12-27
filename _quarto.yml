@@ -5,7 +5,7 @@ project:
 book:
   title: "B2m CD40 analysis"
   author: "Amy Huang"
-  description: "Analysis for the B2m CD40 project"
+  description: "Analysis"
   page-navigation: true
   chapters:
     - index.qmd
@@ -24,16 +24,16 @@ book:
       # - book/09_ifng.qmd
       - book/10_pb.qmd
       - book/11_doublet_analysis.qmd
-      - book/comparing_b2m_KO_and_WT.qmd
+      - book/12_pb-and-sc_comparing_b2m_KO_and_WT.qmd
+      - book/13_pb-and-sc_comparing_CD40_and_isotype.qmd
       - book/figures.qmd
     - part: "TCGA analysis"
       chapters:
       - book/setup_tcga.qmd
-      - book/12_inflammatory_monocyte_signature.qmd
-      - book/13_prelim_tcga_analysis.qmd
-      - book/14_full_tcga_analysis.qmd
-      - book/15_other_clinical_signatures.qmd
-    - part: "Clinical bulk RNA-seq analysis"
+      - book/14_inflammatory_monocyte_signature.qmd
+      - book/15_prelim_tcga_analysis.qmd
+      - book/16_full_tcga_analysis.qmd
+      - book/17_other_clinical_signatures.qmd
     - part: "Miscellaneous"
       chapters:
       - book/export-proportions.qmd

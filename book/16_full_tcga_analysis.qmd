@@ -169,6 +169,12 @@ gsva_res_w_metadata %>%
 
 gsva_res_w_metadata %>% 
     ggplot() + 
+    aes(x = score_M2_macs_vs_rest, y = tumor_type_abbr, 
+        height = ..density..) + 
+    geom_density_ridges(stat = "density")
+
+gsva_res_w_metadata %>% 
+    ggplot() + 
     aes(x = inflamm_minus_m2, y = tumor_type_abbr, 
         height = ..density..) + 
     geom_density_ridges(stat = "density")
@@ -176,8 +182,10 @@ gsva_res_w_metadata %>%
 
 ```{r}
 survfit_inflamm_monocytes_list <- list()
+survfit_m2_list <- list()
 survfit_inflamm_vs_m2_list <- list()
 coxph_inflamm_monocytes_list <- list()
+coxph_m2_list <- list()
 coxph_inflamm_vs_m2_list <- list()
 
 for (tumor_type_str in unique(gsva_res_w_metadata$tumor_type)) {
@@ -194,6 +202,14 @@ for (tumor_type_str in unique(gsva_res_w_metadata$tumor_type)) {
         mutate_split_by_median("score_Inflammatory_monocytes_vs_rest")
     )
     
+    survfit_m2_list[[tumor_type_str]] <- survfit(
+      Surv(OS_MONTHS, OS_STATUS) ~ split_by_median,
+      data = gsva_res_w_metadata %>%
+        filter(tumor_type == tumor_type_str) %>%
+        mutate_split_by_quartiles("score_M2_macs_vs_rest", na.rm = T) %>%
+        mutate_split_by_median("score_M2_macs_vs_rest")
+    )
+    
     survfit_inflamm_vs_m2_list[[tumor_type_str]] <- survfit(
       Surv(OS_MONTHS, OS_STATUS) ~ split_by_median,
       data = gsva_res_w_metadata %>%
@@ -208,6 +224,12 @@ for (tumor_type_str in unique(gsva_res_w_metadata$tumor_type)) {
         filter(tumor_type == tumor_type_str)
     )
     
+    coxph_m2_list[[tumor_type_str]] <- coxph(
+      Surv(OS_MONTHS, OS_STATUS) ~ scaled_score_M2_macs_vs_rest,
+      data = gsva_res_w_metadata %>%
+        filter(tumor_type == tumor_type_str)
+    )
+    
     coxph_inflamm_vs_m2_list[[tumor_type_str]] <- coxph(
       Surv(OS_MONTHS, OS_STATUS) ~ inflamm_minus_m2_scaled,
       data = gsva_res_w_metadata %>%
@@ -218,6 +240,13 @@ for (tumor_type_str in unique(gsva_res_w_metadata$tumor_type)) {
 }
 coxph_inflamm_monocytes_df <-
   coxph_inflamm_monocytes_list %>% map_dfr(
+    broom::tidy,
+    conf.int = TRUE,
+    exponentiate = TRUE,
+    .id = "name"
+  )
+coxph_m2_df <-
+  coxph_m2_list %>% map_dfr(
     broom::tidy,
     conf.int = TRUE,
     exponentiate = TRUE,
@@ -239,6 +268,51 @@ count_df <- gsva_res_w_metadata %>%
     group_by(tumor_type_abbr) %>%
     summarise(n = n())
 coxph_inflamm_monocytes_df %>%
+    mutate(name = str_extract(name, "^.*_tcga") %>% str_sub(end = -6)) %>%
+    left_join(count_df, by = c("name" = "tumor_type_abbr")) %>%
+    mutate(name = paste0(name, " (n=", n, ")")) %>%
+    ggplot() +
+    aes(name, estimate, color = p.value < 0.05) +
+    geom_point(shape = "square", size = 4) +
+    geom_errorbar(aes(ymin = conf.low, ymax = conf.high),
+                  width = 0.2) +
+    geom_hline(yintercept = 1, linetype = "dashed") +
+    geom_text(
+        aes(y = Inf, label = sprintf("p=%s", format(p.value, digits = 1))),
+        hjust = 1.1,
+        vjust = 0,
+        size = 2
+    ) +
+    geom_text(
+        aes(y = Inf,
+            label = sprintf(
+                "(%s -- %s)",
+                format(conf.low, digits = 1, scientific = F),
+                format(conf.high, digits = 1, scientific = F)
+            )),
+        size = 1.5,
+        hjust = 1.1,
+        vjust = 1.5
+    )+
+    labs(x = "", y = "Hazard Ratio") +
+    coord_flip()  +
+    scale_y_log10(expand = expansion(0.2)) +
+    scale_color_manual(values = c("grey", "black")) +
+    theme(
+        axis.line.y = element_blank(),
+        axis.ticks.y = element_blank(),
+        legend.position = "none"
+    )
+```
+
+
+CoxPH of all TCGA with the m2 signature. 
+
+```{r, fig.width = 7, fig.height = 5}
+count_df <- gsva_res_w_metadata %>%
+    group_by(tumor_type_abbr) %>%
+    summarise(n = n())
+coxph_m2_df %>%
     mutate(name = str_extract(name, "^.*_tcga") %>% str_sub(end = -6)) %>%
     left_join(count_df, by = c("name" = "tumor_type_abbr")) %>%
     mutate(name = paste0(name, " (n=", n, ")")) %>%

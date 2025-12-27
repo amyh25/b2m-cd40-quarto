@@ -1,12 +1,14 @@
 ---
+title: "lymphocytes, removed doublets"
 execute: 
   freeze: true
   message: false
   warning: false
 ---
 
-```{r}
+```{r, message = FALSE, warning = FALSE}
 library(here)
+library(ggplot2)
 source(here("lib", "setup.R"))
 source(here("lib", "helper_Seurat.R"))
 source(here("lib", "helper.R"))
@@ -52,11 +54,11 @@ clustree::clustree(so, prefix = "RNA_snn_res.")
 
 ```{r, fig.asp = 1, fig.width = 7}
 get_metadata_from_so(so) %>% 
-    dplyr::select(cell, UMAP_1, UMAP_2, all_of(str_subset(colnames(.), "RNA_snn_res."))) %>% 
+    dplyr::select(cell, umap_1, umap_2, all_of(str_subset(colnames(.), "RNA_snn_res."))) %>% 
     pivot_longer(cols = all_of(str_subset(colnames(.), "RNA_snn_res.")), 
                  names_to = "clustering", 
                  values_to = "cluster") %>% 
-    plot_umap(color_str = "cluster", label = TRUE, label_groups = "clustering") + 
+    plot_umap(color_str = "cluster", x = umap_1, y = umap_2, label = TRUE, label_groups = "clustering") + 
     facet_wrap(~clustering, ncol = 3)
 ```
 
@@ -118,7 +120,8 @@ so <- AddMetaData(so, metadata = cell_type_metadata)
 ```{r}
 get_metadata_from_so(so, metadata = "clusters_T") %>% 
     plot_umap(color_str = "clusters_T", label = TRUE, pointsize = 0.5, 
-              repel_min_segment_length = 0.1) + 
+              repel_min_segment_length = 0.1, 
+              x = umap_1, y = umap_2) + 
     theme(legend.position = "none") + 
     scale_color_manual(values = palette_cluster)
 ```
@@ -204,17 +207,110 @@ get_metadata_from_so(so) %>%
     scale_fill_manual(values = palette_cluster) 
 ```
 
+
+```{r, fig.asp = 2, fig.width = 3}
+get_metadata_from_so(so) %>% 
+    filter(clusters_T != "10: Myeloid/T doublets") %>% 
+    calculate_proportion(clusters_T, group) %>% 
+    mutate(clusters = factor(clusters_T, levels = cluster_ID_name_ordered)) %>% 
+    plot_proportion() + 
+    labs(y = "Frequency of T/NK") + 
+    scale_fill_manual(values = palette_cluster) 
+```
+
+## Box plots with stats
+
+```{r}
+group_mouse_df <-
+    get_metadata_from_so(so,
+                         metadata = c("mouse", "hash.ID", "seq", "group"),
+                         reduction = NULL) %>%
+    select(mouse, group, hash.ID, seq) %>% 
+    # mutate(mouse = paste0(mouse, seq)) %>% 
+    unique()
+prop_df <-
+    get_metadata_from_so(so,
+                         metadata = c("mouse", "seq", "general_T_subtypes", "clusters_T"),
+                         reduction = NULL) %>%
+    # mutate(mouse = paste0(mouse, seq)) %>% 
+    calculate_proportion(clusters_T, mouse) %>%
+    left_join(group_mouse_df, by = "mouse")
+```
+
+```{r, fig.asp = 1/2, fig.width = 12}
+prop_df %>%
+    ggplot() +
+    aes(group, prop) +
+    geom_boxplot() +
+    geom_point() + #aes(color = hash.ID, shape = seq)
+    labs(y = "Proportion of T cells", 
+         caption = "P-values from t tests") +
+    stat_compare_means(
+        comparisons = prop_df$group %>% unique() %>% combn(m = 2, simplify = F),
+        label = "p.signif",
+        method = "t.test"
+    ) +
+    facet_wrap(~ clusters_T, scale = "free_y", ncol = 6) +
+    scale_y_continuous(limits = ~ c(0, .[2] * 1.1),
+                       expand = c(0, 0)) +
+    remove_x_spine() +
+    theme(axis.text.x = element_text(
+        angle = 90,
+        hjust = 1,
+        vjust = 0.5
+    ))
+```
+
+## Galaxy plots
+
+```{r, fig.asp = 1/4, fig.width = 10}
+get_metadata_from_so(so, metadata = c("group")) %>% 
+    make_galaxy_plot(sample_n = 2000, umap1 = "umap_1", umap2 = "umap_2") + 
+    facet_wrap(~group, ncol = 4)
+```
+
+
 # Visualize specific markers
 
 ```{r}
 genes <- c("Cd8a", "Cd3e", "Cd3d", "Lyz2", "Nkg7", "Trbc2")
 get_metadata_from_so(so, genes = genes) %>% 
     pivot_longer(cols = all_of(genes)) %>% 
-    plot_umap(pointsize = 1.1) + 
+    plot_umap(pointsize = 1.1, 
+              x = umap_1, y = umap_2) + 
     facet_wrap(~name)
 ```
 
-# export ifng for Brian 
+# IFNg expression
+
+Where is IFNg expressed in our T cells?
+
+```{r}
+ifng_df <- get_metadata_from_so(so, genes = "Ifng") 
+plot_umap(ifng_df, color_str = "Ifng", pointsize = 1.5, pixels = c(1024, 1024), 
+          x = umap_1, y = umap_2)
+plot_violin(ifng_df, group = clusters_T, var = Ifng) + 
+    scale_fill_manual(values = palette_cluster)
+```
+
+```{r, fig.asp = 1.5, fig.width = 4, output-fold=TRUE}
+ifng_df %>%
+  named_group_split(clusters_T) %>%
+  imap( ~ {
+    plot_violin(..1, group = group, var = Ifng) +
+      geom_jitter(size = 0.1) +
+      labs(title = ..2) +
+      stat_compare_means(
+        comparisons = ifng_df$group %>% unique() %>% combn(m = 2, simplify = F),
+        vjust = 1.5,
+        label = "p.signif"
+      )
+  })
+
+```
+
+
+## export ifng
 
 ```{r}
 mean_ifng_df <- get_metadata_from_so(so, genes = "Ifng") %>% 
@@ -227,6 +323,358 @@ write_tsv(
         "so_filterRNA200mito10_subsetTremovedoublets__mean_ifng_df.tsv"
     )
 )
+```
+
+# Clustree
+
+```{r}
+get_metadata_from_so(so) %>% 
+    pivot_longer(cols = str_subset(colnames(.), "RNA_snn_res"), 
+                 names_to = "clustering", 
+                 values_to = "cluster_num") %>% 
+    plot_umap(color_str = "cluster_num", x = umap_1, y = umap_2) + 
+    facet_wrap(~clustering) 
+```
+
+```{r, fig.asp = 1, fig.width = 7}
+clustree(so, prefix = "RNA_snn_res.")
+```
+
+# DGE B2m KO vs WT
+
+```{r}
+b2m.vs.wt <- FindMarkers(so %>% set_idents("genotype"),
+            ident.1 = "B2m KO",
+            ident.2 = "Ctrl")
+saveRDS(b2m.vs.wt, file.path(results_dir, "so_filterRNA200mito10_subsetTremovedoublets_b2m.vs.wt.rds"))
+```
+
+```{r, eval = F}
+b2m.vs.wt %>% as_tibble(rownames = "gene") %>% write_csv(file.path(
+  results_dir, "so_filterRNA200mito10_subsetTremovedoublets_b2m.vs.wt.csv"
+))
+```
+
+# CD8 differential expression 
+
+```{r}
+so_cd8 <- subset(so %>% set_idents("clusters_T"), 
+                 idents = c("1: Proliferating CD8+ T", 
+                            "2: CD40-freq Exhausted CD8+ T",
+                            "4: CD40-freq CD8+ T", 
+                            "5: Naïve T", 
+                            "7: Exhausted CD8+ T", 
+                            "9: IFN-sensing T"))
+
+cd8_dir <- file.path(results_dir, "subsetT_subsetCD8")
+if (!dir.exists(cd8_dir)) dir.create(cd8_dir)
+```
+
+```{r, fig.asp = 1, fig.width = 4}
+cd8_prop_df <- get_metadata_from_so(so_cd8) %>% 
+    calculate_proportion(clusters_T, group) %>% 
+    mutate(clusters = clusters_T) 
+cd8_prop_df %>% 
+    plot_proportion() +
+    labs(y = "Proportion of CD8+ T") +
+    theme(legend.position = "right") + 
+    scale_fill_manual(values = palette_cluster[unique(cd8_prop_df$clusters_T)])
+    
+```
+
+## CD40 and isotype
+
+```{r}
+get_metadata_from_so(so_cd8) %>% 
+    group_by(group) %>% 
+    count()
+```
+
+### Split by genotype
+
+```{r}
+dge_fn <- "so_filterRNA200mito10_subsetTremovedoublets_subsetCD8_WT_cd40-vs-iso.rds"
+markers_cd8_cd40.v.iso_wt <- run_or_readRDS(
+    file.path(cd8_dir, dge_fn),
+    function() {FindMarkers(
+        so_cd8 %>% set_idents("genotype"),
+        subset.ident = "Ctrl",
+        group.by = "treatment",
+        ident.1 = "CD40 agonist",
+        ident.2 = "Isotype"
+    )}
+)
+dge_fn <- "so_filterRNA200mito10_subsetTremovedoublets_subsetCD8_B2mKO_cd40-vs-iso.rds"
+markers_cd8_cd40.v.iso_b2mKO <- run_or_readRDS(
+    file.path(cd8_dir, dge_fn),
+    function() {FindMarkers(
+        so_cd8 %>% set_idents("genotype"),
+        subset.ident = "B2m KO",
+        group.by = "treatment",
+        ident.1 = "CD40 agonist",
+        ident.2 = "Isotype"
+    )}
+)
+```
+
+```{r, eval = FALSE}
+markers_cd8_cd40.v.iso_wt %>% as_tibble(rownames = "gene") %>% 
+  write_csv(file.path(cd8_dir, "so_filterRNA200mito10_subsetTremovedoublets_subsetCD8_WT_cd40-vs-iso.csv"))
+markers_cd8_cd40.v.iso_b2mKO %>% as_tibble(rownames = "gene") %>% 
+  write_csv(file.path(cd8_dir, "so_filterRNA200mito10_subsetTremovedoublets_subsetCD8_B2mKO_cd40-vs-iso.csv"))
+```
+
+
+```{r}
+markers_cd8_cd40.v.iso_wt %>% 
+    as_tibble(rownames = "gene") %>% 
+    ggplot() + 
+    aes(avg_log2FC, -log10(p_val_adj)) + 
+    geom_scattermore(pointsize = 2.1, pixels = c(1024, 1024)) + 
+    geom_hline(yintercept = -log10(1e-200)) +
+    geom_vline(xintercept = c(-0.25, 0.25), linetype = "dashed") +
+    geom_text_repel(aes(label = gene), 
+                    data = ~..1 %>% filter(p_val_adj < 1e-200), 
+                    max.overlaps = Inf, 
+                    size = 3) + 
+    theme(aspect.ratio = 1, 
+          plot.title = element_text(hjust = 0.5)) + 
+    labs(caption = "horizontal line drawn -log10(1e-200)", 
+         title = "WT: Genes associated with CD40 treatment in CD8+ T cells", 
+         subtitle = "CD40 treatment (right) and isotype (left)")
+```
+
+
+```{r}
+markers_cd8_cd40.v.iso_b2mKO %>% 
+    as_tibble(rownames = "gene") %>% 
+    ggplot() + 
+    aes(avg_log2FC, -log10(p_val_adj)) + 
+    geom_scattermore(pointsize = 2.1, pixels = c(1024, 1024)) + 
+    geom_hline(yintercept = -log10(1e-60), linetype = "dashed") +
+    geom_vline(xintercept = c(-0.25, 0.25), linetype = "dashed") +
+    geom_text_repel(aes(label = gene), 
+                    data = ~..1 %>% filter(p_val_adj < 1e-60), 
+                    max.overlaps = Inf, 
+                    size = 3) + 
+    theme(aspect.ratio = 1, 
+          plot.title = element_text(hjust = 0.5)) + 
+    labs(caption = "dashed horizontal line drawn -log10(1e-60)", 
+         title = "B2m KO: Genes associated with CD40 treatment in CD8+ T cells", 
+         subtitle = "CD40 treatment (right) and isotype (left)")
+```
+
+## Within isotype, bw B2m and Ctrl
+
+```{r}
+dge_fn <- "so_filterRNA200mito10_subsetTremovedoublets_subsetCD8_iso_b2m-vs-wt.rds"
+markers_cd8_B2m.vs.wt_iso <- run_or_readRDS(
+    file.path(cd8_dir, dge_fn),
+    function() {FindMarkers(
+        so_cd8 %>% set_idents("treatment"),
+        subset.ident = "Isotype",
+        group.by = "genotype",
+        ident.1 = "B2m KO",
+        ident.2 = "Ctrl"
+    )}
+)
+```
+
+```{r}
+markers_cd8_B2m.vs.wt_iso %>% 
+    as_tibble(rownames = "gene") %>% 
+    ggplot() + 
+    aes(avg_log2FC, -log10(p_val_adj)) + 
+    geom_scattermore(pointsize = 2.1, pixels = c(1024, 1024)) + 
+    geom_hline(yintercept = -log10(1e-25), linetype = "dashed") +
+    geom_vline(xintercept = c(-0.25, 0.25), linetype = "dashed") +
+    geom_text_repel(aes(label = gene), 
+                    data = ~..1 %>% filter(p_val_adj < 1e-25), 
+                    max.overlaps = Inf, 
+                    size = 3) + 
+    theme(aspect.ratio = 1, 
+          plot.title = element_text(hjust = 0.5)) + 
+    labs(caption = "dashed horizontal line drawn -log10(1e-25)", 
+         title = "Isotype: Genes associated with B2m KO in CD8+ T cells", 
+         subtitle = "B2m KO (right) and WT (left)")
+```
+
+## Within CD40 treatment, bw B2m and Ctrl
+
+```{r}
+dge_fn <- "so_filterRNA200mito10_subsetTremovedoublets_subsetCD8_CD40_b2m-vs-wt.rds"
+markers_cd8_B2m.vs.wt_Cd40 <- run_or_readRDS(
+    file.path(cd8_dir, dge_fn),
+    function() {FindMarkers(
+        so_cd8 %>% set_idents("treatment"),
+        subset.ident = "CD40 agonist",
+        group.by = "genotype",
+        ident.1 = "B2m KO",
+        ident.2 = "Ctrl"
+    )}
+)
+```
+
+```{r}
+thresh_b2m <- 1e-200
+thresh_wt <- 1e-200
+markers_cd8_B2m.vs.wt_Cd40 %>% 
+    as_tibble(rownames = "gene") %>% 
+    ggplot() + 
+    aes(avg_log2FC, -log10(p_val_adj)) + 
+    geom_scattermore(pointsize = 2.1, pixels = c(1024, 1024)) + 
+    annotate("segment", x = -Inf, xend = 0, 
+             y = -log10(thresh_wt), yend = -log10(thresh_wt), 
+             linetype = "dashed") + 
+    annotate("segment", x = 0, xend = Inf, 
+             y = -log10(thresh_b2m), yend = -log10(thresh_b2m), 
+             linetype = "dashed") + 
+    geom_vline(xintercept = c(-0.25, 0.25), linetype = "dashed") +
+    geom_text_repel(aes(label = gene),
+                    data = ~..1 %>% 
+                        filter((p_val_adj < thresh_b2m & avg_log2FC > 0) | 
+                                   (p_val_adj < thresh_wt & avg_log2FC < 0)),
+                    max.overlaps = Inf,
+                    size = 3) +
+    theme(aspect.ratio = 1, 
+          plot.title = element_text(hjust = 0.5)) + 
+    labs(caption = "genes above dashed horizontal lines are labelled", 
+         title = "CD40 agonist: Genes associated with B2m KO in CD8+ T cells", 
+         subtitle = "B2m KO (right) and WT (left)")
+```
+
+```{r, eval = FALSE}
+markers_cd8_B2m.vs.wt_iso %>% as_tibble(rownames = "gene") %>% 
+  write_csv(file.path(cd8_dir, "so_filterRNA200mito10_subsetTremovedoublets_subsetCD8_iso_b2m-vs-wt.rds"))
+markers_cd8_B2m.vs.wt_Cd40 %>% as_tibble(rownames = "gene") %>% 
+  write_csv(file.path(cd8_dir, "so_filterRNA200mito10_subsetTremovedoublets_subsetCD8_CD40_b2m-vs-wt.rds"))
+```
+
+# DGE for each cluster
+
+## CD40 and isotype
+
+### Split by genotype
+
+```{r}
+clusters_T <- so@meta.data$clusters_T %>% unique() %>% set_names()
+
+markers_percluster_cd40.v.iso_wt <- run_or_readRDS(
+  file.path(results_dir, "so_filterRNA200mito10_subsetTremovedoublets_percluster_wt_cd40.v.iso.rds"), 
+  function() {clusters_T %>%
+    map( ~ {
+      so_subset <- subset(so %>% set_idents("clusters_T"), idents = ..1)
+      FindMarkers(
+        so_subset %>% set_idents("genotype"),
+        subset.ident = "Ctrl",
+        group.by = "treatment",
+        ident.1 = "CD40 agonist",
+        ident.2 = "Isotype"
+      ) %>% as_tibble(rownames = "gene")
+    }) %>%
+    list_rbind(names_to = "clusters_T")}
+)
+
+markers_percluster_cd40.v.iso_b2m <- run_or_readRDS(
+  file.path(results_dir, "so_filterRNA200mito10_subsetTremovedoublets_percluster_b2mko_cd40.v.iso.rds"), 
+  function() {clusters_T %>%
+    map( ~ {
+      so_subset <- subset(so %>% set_idents("clusters_T"), idents = ..1)
+      FindMarkers(
+        so_subset %>% set_idents("genotype"),
+        subset.ident = "B2m KO",
+        group.by = "treatment",
+        ident.1 = "CD40 agonist",
+        ident.2 = "Isotype"
+      ) %>% as_tibble(rownames = "gene")
+    }) %>%
+    list_rbind(names_to = "clusters_T")}
+)
+```
+
+```{r, eval = F}
+markers_percluster_cd40.v.iso_wt %>% write_csv(
+  file.path(results_dir, "so_filterRNA200mito10_subsetTremovedoublets_percluster_wt_cd40.v.iso.csv")
+)
+markers_percluster_cd40.v.iso_b2m %>% write_csv(
+  file.path(results_dir, "so_filterRNA200mito10_subsetTremovedoublets_percluster_b2m_cd40.v.iso.csv")
+)
+```
+
+
+# Visualize specific markers
+
+```{r}
+genes <- c("Cd4", "Cd8a", "Cd3e", "Cd3d", "Lyz2", "Stmn1")
+get_metadata_from_so(so, genes = genes) %>% 
+    pivot_longer(cols = all_of(genes)) %>% 
+    plot_umap(pointsize = 1.1, x = umap_1, y = umap_2) + 
+    facet_wrap(~name)
+```
+
+```{r}
+genes <- c("Ccl5", "Hcst", "Itga4", "Fyn", "S100a6")
+get_metadata_from_so(so, genes = genes) %>% 
+    pivot_longer(cols = all_of(genes)) %>% 
+    plot_umap(pointsize = 1.1, x = umap_1, y = umap_2) + 
+    facet_wrap(~name)
+```
+
+```{r}
+genes <- c("Ctla4", "Pdcd1", "Ikzf2", "Foxp3", "Il2ra")
+get_metadata_from_so(so, genes = genes) %>% 
+    pivot_longer(cols = all_of(genes)) %>% 
+    plot_umap(pointsize = 1.1, x = umap_1, y = umap_2) + 
+    facet_wrap(~name)
+```
+
+```{r}
+genes <- c("Ccl3", "Ccl4", "Lag3", "Havcr2", "Tigit", "Tox")
+get_metadata_from_so(so, genes = genes) %>% 
+    pivot_longer(cols = all_of(genes)) %>% 
+    plot_umap(pointsize = 1.1, x = umap_1, y = umap_2) + 
+    facet_wrap(~name)
+```
+
+```{r}
+genes <- c("Gzmc", "Gzma", "Gzmk", "Ifng", "Prf1", "Klra4")
+get_metadata_from_so(so, genes = genes) %>% 
+    pivot_longer(cols = all_of(genes)) %>% 
+    plot_umap(pointsize = 1.1, x = umap_1, y = umap_2) + 
+    facet_wrap(~name)
+```
+
+```{r}
+genes <- c("Vim", "Hif1a", "Ldha", "Ifit1", "Isg15", "Ifit3")
+get_metadata_from_so(so, genes = genes) %>% 
+    pivot_longer(cols = all_of(genes)) %>% 
+    plot_umap(pointsize = 1.1, x = umap_1, y = umap_2) + 
+    facet_wrap(~name)
+```
+
+```{r}
+genes <- c("Il1rl1", "Gata3", "Cd163l1")
+get_metadata_from_so(so, genes = genes) %>% 
+    pivot_longer(cols = all_of(genes)) %>% 
+    plot_umap(pointsize = 1.1, x = umap_1, y = umap_2) + 
+    facet_wrap(~name)
+```
+
+# NK cells
+
+Ccl5 expression in NK cells increases upon CD40 treatment. 
+
+```{r}
+get_metadata_from_so(so, genes = "Ccl5") %>% 
+    filter(clusters_T %>% str_detect("NK")) %>% 
+    ggplot() + 
+    aes(genotype, Ccl5, fill = treatment) + 
+    geom_violin(scale = "width") + 
+    facet_grid(~clusters_T) + 
+    remove_x_spine() + 
+    scale_y_continuous(expand = c(0, 0)) + 
+    theme(strip.background = element_blank()) + 
+    labs(title = "Ccl5 expression in NK cells increases upon CD40 treatment") 
 ```
 
 # END

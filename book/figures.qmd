@@ -250,7 +250,7 @@ Heatmap(h_mtx,
 
 ```{r}
 sig_dir <- here("data", "signatures")
-mouse_human_genes <- readRDS(here("data", "mouse_human_genes.rds")) %>% 
+mouse_human_genes <- readRDS(here("data", "signatures", "mouse_human_genes.rds")) %>% 
     as_tibble()
 jablonski_df <-
     read_tsv(
@@ -396,9 +396,6 @@ prop_df <- metadata_all %>%
 ```
 
 ```{r glm_treatment_df}
-# I was pretty proud of these stats, but I think Brian would rather
-# a simple wilcoxon?
-
 glm_out_df <- prop_df %>%
     group_by(grouped_clusters) %>%
     summarise(glm_out = broom::tidy(
@@ -541,14 +538,15 @@ get_metadata_from_so(so_T) %>%
     plot_umap(
         color_str = "clusters_T",
         pixels = c(2048, 2048),
-        pointsize = 5.1
+        pointsize = 5.1, 
+        x = umap_1, y = umap_2
     ) +
     geom_text_repel(
         aes(label = clusters_T),
         data = ~..1 %>% 
             group_by(clusters_T) %>% 
-            summarise(UMAP_1 = mean(UMAP_1), 
-                      UMAP_2 = mean(UMAP_2)),
+            summarise(umap_1 = mean(umap_1), 
+                      umap_2 = mean(umap_2)),
         force = 5,
         size = 2
     ) + 
@@ -721,8 +719,6 @@ plot_df %>%
 ```
 
 ### ifng in lymphocytes, NOT grouped
-
-8/29/2023, Brian thought that explaining the groups may be too much? So we're just going to go with the cluster names. 
 
 ```{r}
 ifng_df <- get_metadata_from_so(so_T, genes = c("Ifng")) %>%
@@ -1322,8 +1318,6 @@ prop_df %>%
 # Figure 5
 
 For the panels in figure 5, please see the earlier section labelled "Full TCGA Analysis" and "Compare Monocyte Signature to Others"
-
-<!-- TODO: figure out how to implement references in quarto.  -->
 
 # Supplementary scRNAseq figure
 

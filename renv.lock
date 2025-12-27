@@ -9,6 +9,23 @@
     ]
   },
   "Packages": {
+    "AICcmodavg": {
+      "Package": "AICcmodavg",
+      "Version": "2.3-4",
+      "Source": "Repository",
+      "Repository": "CRAN",
+      "Hash": "2aa5a9a2a5200b87b0db6c59baec83a9",
+      "Requirements": [
+        "MASS",
+        "Matrix",
+        "VGAM",
+        "lattice",
+        "nlme",
+        "survival",
+        "unmarked",
+        "xtable"
+      ]
+    },
     "AnnotationDbi": {
       "Package": "AnnotationDbi",
       "Version": "1.60.2",
@@ -84,7 +101,7 @@
       "Package": "BiocManager",
       "Version": "1.30.21.1",
       "Source": "Repository",
-      "Repository": "CRAN",
+      "Repository": "RSPM",
       "Hash": "85afdfb6010b8eb074f8d28ce4596bd7",
       "Requirements": []
     },
@@ -177,7 +194,7 @@
       "Package": "Cairo",
       "Version": "1.6-0",
       "Source": "Repository",
-      "Repository": "CRAN",
+      "Repository": "RSPM",
       "Hash": "60aada7beac23aa3e9b219485d6b2da8",
       "Requirements": []
     },
@@ -210,7 +227,7 @@
       "Package": "DBI",
       "Version": "1.1.3",
       "Source": "Repository",
-      "Repository": "CRAN",
+      "Repository": "RSPM",
       "Hash": "b2866e62bab9378c3cc9476a1954226b",
       "Requirements": []
     },
@@ -239,6 +256,14 @@
         "matrixStats"
       ]
     },
+    "DEoptim": {
+      "Package": "DEoptim",
+      "Version": "2.2-8",
+      "Source": "Repository",
+      "Repository": "CRAN",
+      "Hash": "3d75dd10e7228c9d734237dda013ed90",
+      "Requirements": []
+    },
     "DOSE": {
       "Package": "DOSE",
       "Version": "3.24.2",
@@ -263,7 +288,7 @@
       "Package": "DT",
       "Version": "0.28",
       "Source": "Repository",
-      "Repository": "CRAN",
+      "Repository": "RSPM",
       "Hash": "ab745834dfae7eaf71dd0b90f3b66759",
       "Requirements": [
         "crosstalk",
@@ -315,7 +340,7 @@
       "Package": "FNN",
       "Version": "1.1.3.2",
       "Source": "Repository",
-      "Repository": "CRAN",
+      "Repository": "RSPM",
       "Hash": "e9e53a559ef99e0c02bc2f9a944f0bee",
       "Requirements": []
     },
@@ -525,16 +550,16 @@
       "Package": "MASS",
       "Version": "7.3-58.1",
       "Source": "Repository",
-      "Repository": "CRAN",
+      "Repository": "RSPM",
       "Hash": "762e1804143a332333c054759f89a706",
       "Requirements": []
     },
     "Matrix": {
       "Package": "Matrix",
-      "Version": "1.5-1",
+      "Version": "1.6-5",
       "Source": "Repository",
       "Repository": "CRAN",
-      "Hash": "539dc0c0c05636812f1080f473d2c177",
+      "Hash": "8c7115cd3a0e048bda2a7cd110549f7a",
       "Requirements": [
         "lattice"
       ]
@@ -543,7 +568,7 @@
       "Package": "Matrix.utils",
       "Version": "0.9.8",
       "Source": "Repository",
-      "Repository": "CRAN",
+      "Repository": "RSPM",
       "Hash": "74d1586cef483fdd0703316240ed8c1e",
       "Requirements": [
         "Matrix",
@@ -567,7 +592,7 @@
       "Package": "MatrixModels",
       "Version": "0.5-2",
       "Source": "Repository",
-      "Repository": "CRAN",
+      "Repository": "RSPM",
       "Hash": "26749bd5c7c4123dd23aeb9159be22d6",
       "Requirements": [
         "Matrix"
@@ -594,6 +619,11 @@
       "Version": "1.1-3",
       "Source": "Repository",
       "Repository": "CRAN",
+      "RemoteType": "standard",
+      "RemotePkgRef": "RColorBrewer",
+      "RemoteRef": "RColorBrewer",
+      "RemoteRepos": "https://cloud.r-project.org",
+      "RemoteSha": "1.1-3",
       "Hash": "45f0398006e83a5b10b72a90663d8d8c",
       "Requirements": []
     },
@@ -601,24 +631,11 @@
       "Package": "RCurl",
       "Version": "1.98-1.12",
       "Source": "Repository",
-      "Repository": "CRAN",
+      "Repository": "RSPM",
       "Hash": "1d6ed2d006d483f31c6d5531f3a39923",
       "Requirements": [
         "bitops"
       ]
-    },
-    "RFunctions": {
-      "Package": "RFunctions",
-      "Version": "0.0.0.9000",
-      "Source": "GitHub",
-      "RemoteType": "github",
-      "RemoteHost": "api.github.com",
-      "RemoteRepo": "RFunctions",
-      "RemoteUsername": "amyh25",
-      "RemoteRef": "HEAD",
-      "RemoteSha": "b720919723a2dac86b20b8cd10ddd93c5fafc8a8",
-      "Hash": "d1043e34b749cb7daf1ce01dd6c72473",
-      "Requirements": []
     },
     "ROCR": {
       "Package": "ROCR",
@@ -634,7 +651,7 @@
       "Package": "RSQLite",
       "Version": "2.3.1",
       "Source": "Repository",
-      "Repository": "CRAN",
+      "Repository": "RSPM",
       "Hash": "207c90cd5438a1f596da2cd54c606fee",
       "Requirements": [
         "DBI",
@@ -646,11 +663,23 @@
         "plogr"
       ]
     },
+    "RSpectra": {
+      "Package": "RSpectra",
+      "Version": "0.16-1",
+      "Source": "Repository",
+      "Repository": "CRAN",
+      "Hash": "6b5ab997fd5ff6d46a5f1d9f8b76961c",
+      "Requirements": [
+        "Matrix",
+        "Rcpp",
+        "RcppEigen"
+      ]
+    },
     "Rcpp": {
       "Package": "Rcpp",
       "Version": "1.0.11",
       "Source": "Repository",
-      "Repository": "CRAN",
+      "Repository": "RSPM",
       "Hash": "ae6cbbe1492f4de79c45fce06f967ce8",
       "Requirements": []
     },
@@ -658,7 +687,7 @@
       "Package": "RcppAnnoy",
       "Version": "0.0.21",
       "Source": "Repository",
-      "Repository": "CRAN",
+      "Repository": "RSPM",
       "Hash": "1ea20f32b667412b5927fd696fba3ba1",
       "Requirements": [
         "Rcpp"
@@ -668,7 +697,7 @@
       "Package": "RcppArmadillo",
       "Version": "0.12.4.1.0",
       "Source": "Repository",
-      "Repository": "CRAN",
+      "Repository": "RSPM",
       "Hash": "44b6ca3a6d22b4c87cdd6140e6f15245",
       "Requirements": [
         "Rcpp"
@@ -678,7 +707,7 @@
       "Package": "RcppEigen",
       "Version": "0.3.3.9.3",
       "Source": "Repository",
-      "Repository": "CRAN",
+      "Repository": "RSPM",
       "Hash": "1e035db628cefb315c571202d70202fe",
       "Requirements": [
         "Matrix",
@@ -689,7 +718,7 @@
       "Package": "RcppHNSW",
       "Version": "0.4.1",
       "Source": "Repository",
-      "Repository": "CRAN",
+      "Repository": "RSPM",
       "Hash": "a3fd7fda39fec57a7086b4fb9fa8aba3",
       "Requirements": [
         "Rcpp"
@@ -725,6 +754,16 @@
         "Rcpp"
       ]
     },
+    "Rdpack": {
+      "Package": "Rdpack",
+      "Version": "2.6.4",
+      "Source": "Repository",
+      "Repository": "CRAN",
+      "Hash": "1b2ca1972e3b00cd0bb5a98e16403028",
+      "Requirements": [
+        "rbibutils"
+      ]
+    },
     "Rhdf5lib": {
       "Package": "Rhdf5lib",
       "Version": "1.20.0",
@@ -740,8 +779,8 @@
       "Package": "Rsc",
       "Version": "0.0.0.9000",
       "Source": "GitHub",
-      "Remotes": "satijalab/seurat-wrappers",
       "RemoteType": "github",
+      "Remotes": "satijalab/seurat-wrappers",
       "RemoteHost": "api.github.com",
       "RemoteRepo": "Rsc",
       "RemoteUsername": "amyh25",
@@ -767,7 +806,7 @@
       "Package": "Rtsne",
       "Version": "0.16",
       "Source": "Repository",
-      "Repository": "CRAN",
+      "Repository": "RSPM",
       "Hash": "e921b89ef921905fc89b95886675706d",
       "Requirements": [
         "Rcpp"
@@ -803,10 +842,10 @@
     },
     "Seurat": {
       "Package": "Seurat",
-      "Version": "4.3.0.1",
+      "Version": "5.0.3",
       "Source": "Repository",
       "Repository": "CRAN",
-      "Hash": "54518b4c3db3d3f6217b96a4afd2fe52",
+      "Hash": "f5325a968489ef65254a51d74dc0c520",
       "Requirements": [
         "KernSmooth",
         "MASS",
@@ -814,17 +853,21 @@
         "RANN",
         "RColorBrewer",
         "ROCR",
+        "RSpectra",
         "Rcpp",
         "RcppAnnoy",
         "RcppEigen",
+        "RcppHNSW",
         "RcppProgress",
         "Rtsne",
         "SeuratObject",
         "cluster",
         "cowplot",
+        "fastDummies",
         "fitdistrplus",
         "future",
         "future.apply",
+        "generics",
         "ggplot2",
         "ggrepel",
         "ggridges",
@@ -834,6 +877,7 @@
         "irlba",
         "jsonlite",
         "leiden",
+        "lifecycle",
         "lmtest",
         "matrixStats",
         "miniUI",
@@ -842,6 +886,7 @@
         "plotly",
         "png",
         "progressr",
+        "purrr",
         "reticulate",
         "rlang",
         "scales",
@@ -856,19 +901,22 @@
     },
     "SeuratObject": {
       "Package": "SeuratObject",
-      "Version": "4.1.3",
+      "Version": "5.0.1",
       "Source": "Repository",
       "Repository": "CRAN",
-      "Hash": "31a87fa60eee00965ec7b5a5f56869b0",
+      "Hash": "424c2b9e50b053c86fc38f17e09917da",
       "Requirements": [
         "Matrix",
         "Rcpp",
         "RcppEigen",
         "future",
         "future.apply",
+        "generics",
+        "lifecycle",
         "progressr",
         "rlang",
-        "sp"
+        "sp",
+        "spam"
       ]
     },
     "SingleCellExperiment": {
@@ -917,11 +965,65 @@
         "S4Vectors"
       ]
     },
+    "TMB": {
+      "Package": "TMB",
+      "Version": "1.9.19",
+      "Source": "Repository",
+      "Repository": "CRAN",
+      "Hash": "17093525d3c647976a5da3538f9f12d7",
+      "Requirements": [
+        "Matrix",
+        "RcppEigen"
+      ]
+    },
+    "VGAM": {
+      "Package": "VGAM",
+      "Version": "1.1-14",
+      "Source": "Repository",
+      "Repository": "CRAN",
+      "Hash": "d0c561977ba6b718d3261aa60b417c2d",
+      "Requirements": []
+    },
+    "VISION": {
+      "Package": "VISION",
+      "Version": "3.0.2",
+      "Source": "GitHub",
+      "RemoteType": "github",
+      "RemoteHost": "api.github.com",
+      "RemoteRepo": "VISION",
+      "RemoteUsername": "YosefLab",
+      "RemoteRef": "HEAD",
+      "RemoteSha": "0de1c08ec06100a6831684ba62ec4202772e7b90",
+      "Hash": "736904191039be73a3af5e2fa61ba7e0",
+      "Requirements": [
+        "Matrix",
+        "RANN",
+        "Rcpp",
+        "Rtsne",
+        "ape",
+        "dplyr",
+        "fastICA",
+        "igraph",
+        "irlba",
+        "jsonlite",
+        "logging",
+        "matrixStats",
+        "mclust",
+        "mime",
+        "pbmcapply",
+        "phytools",
+        "plumber",
+        "reticulate",
+        "rsvd",
+        "vegan",
+        "wordspace"
+      ]
+    },
     "XML": {
       "Package": "XML",
       "Version": "3.99-0.14",
       "Source": "Repository",
-      "Repository": "CRAN",
+      "Repository": "RSPM",
       "Hash": "e5c8af79df616c135b21eaeb1dc6bc5c",
       "Requirements": []
     },
@@ -970,10 +1072,10 @@
     },
     "ape": {
       "Package": "ape",
-      "Version": "5.7-1",
+      "Version": "5.8-1",
       "Source": "Repository",
       "Repository": "CRAN",
-      "Hash": "10705eec964349f270504754d8fe8ef1",
+      "Hash": "54e5b03e928da23e75dc5bb633648d27",
       "Requirements": [
         "Rcpp",
         "digest",
@@ -985,7 +1087,7 @@
       "Package": "aplot",
       "Version": "0.1.10",
       "Source": "Repository",
-      "Repository": "CRAN",
+      "Repository": "RSPM",
       "Hash": "e5ce4f3b5fe236bb879712ff8f956f06",
       "Requirements": [
         "ggfun",
@@ -999,7 +1101,7 @@
       "Package": "askpass",
       "Version": "1.1",
       "Source": "Repository",
-      "Repository": "CRAN",
+      "Repository": "RSPM",
       "Hash": "e8a22846fff485f0be3770c2da758713",
       "Requirements": [
         "sys"
@@ -1036,7 +1138,7 @@
       "Package": "bayestestR",
       "Version": "0.13.1",
       "Source": "Repository",
-      "Repository": "CRAN",
+      "Repository": "RSPM",
       "Hash": "61f643ea5ee9fe0e70ab0246340b3c2e",
       "Requirements": [
         "datawizard",
@@ -1129,7 +1231,7 @@
       "Package": "boot",
       "Version": "1.3-28.1",
       "Source": "Repository",
-      "Repository": "CRAN",
+      "Repository": "RSPM",
       "Hash": "9a052fbcbe97a98ceb18dbfd30ebd96e",
       "Requirements": []
     },
@@ -1163,16 +1265,18 @@
     },
     "bslib": {
       "Package": "bslib",
-      "Version": "0.5.0",
+      "Version": "0.7.0",
       "Source": "Repository",
       "Repository": "CRAN",
-      "Hash": "1b117970533deb6d4e992c1b34e9d905",
+      "Hash": "8644cc53f43828f19133548195d7e59e",
       "Requirements": [
         "base64enc",
         "cachem",
+        "fastmap",
         "htmltools",
         "jquerylib",
         "jsonlite",
+        "lifecycle",
         "memoise",
         "mime",
         "rlang",
@@ -1204,7 +1308,7 @@
       "Package": "callr",
       "Version": "3.7.3",
       "Source": "Repository",
-      "Repository": "CRAN",
+      "Repository": "RSPM",
       "Hash": "9b2191ede20fa29828139b9900922e51",
       "Requirements": [
         "R6",
@@ -1253,7 +1357,7 @@
       "Package": "checkmate",
       "Version": "2.2.0",
       "Source": "Repository",
-      "Repository": "CRAN",
+      "Repository": "RSPM",
       "Hash": "ca9c113196136f4a9ca9ce6079c2c99e",
       "Requirements": [
         "backports"
@@ -1263,7 +1367,7 @@
       "Package": "circlize",
       "Version": "0.4.15",
       "Source": "Repository",
-      "Repository": "CRAN",
+      "Repository": "RSPM",
       "Hash": "2bb47a2fe6ab009b1dcc5566d8c3a988",
       "Requirements": [
         "GlobalOptions",
@@ -1275,7 +1379,7 @@
       "Package": "cli",
       "Version": "3.6.1",
       "Source": "Repository",
-      "Repository": "CRAN",
+      "Repository": "RSPM",
       "Hash": "89e6d8219950eac806ae0c489052048a",
       "Requirements": []
     },
@@ -1291,7 +1395,7 @@
       "Package": "clue",
       "Version": "0.3-64",
       "Source": "Repository",
-      "Repository": "CRAN",
+      "Repository": "RSPM",
       "Hash": "f013e45eb656a4bb17b39cb24827a51f",
       "Requirements": [
         "cluster"
@@ -1301,9 +1405,19 @@
       "Package": "cluster",
       "Version": "2.1.4",
       "Source": "Repository",
-      "Repository": "CRAN",
+      "Repository": "RSPM",
       "Hash": "5edbbabab6ce0bf7900a74fd4358628e",
       "Requirements": []
+    },
+    "clusterGeneration": {
+      "Package": "clusterGeneration",
+      "Version": "1.3.8",
+      "Source": "Repository",
+      "Repository": "CRAN",
+      "Hash": "62df4b1fe7abefcf921dd7e52a801a6b",
+      "Requirements": [
+        "MASS"
+      ]
     },
     "clusterProfiler": {
       "Package": "clusterProfiler",
@@ -1335,7 +1449,7 @@
       "Package": "clustree",
       "Version": "0.5.0",
       "Source": "Repository",
-      "Repository": "CRAN",
+      "Repository": "RSPM",
       "Hash": "79c4a3d0ba7150fb53be125a0708e115",
       "Requirements": [
         "checkmate",
@@ -1347,6 +1461,16 @@
         "rlang",
         "tidygraph",
         "viridis"
+      ]
+    },
+    "coda": {
+      "Package": "coda",
+      "Version": "0.19-4.1",
+      "Source": "Repository",
+      "Repository": "CRAN",
+      "Hash": "af436915c590afc6fffc3ce3a5be1569",
+      "Requirements": [
+        "lattice"
       ]
     },
     "codetools": {
@@ -1363,6 +1487,14 @@
       "Source": "Repository",
       "Repository": "CRAN",
       "Hash": "f20c47fd52fae58b4e377c37bb8c335b",
+      "Requirements": []
+    },
+    "combinat": {
+      "Package": "combinat",
+      "Version": "0.0-8",
+      "Source": "Repository",
+      "Repository": "CRAN",
+      "Hash": "f0acb9dcb71a9cd9d5ae233c5035b1c5",
       "Requirements": []
     },
     "commonmark": {
@@ -1410,7 +1542,7 @@
       "Package": "cowplot",
       "Version": "1.1.1",
       "Source": "Repository",
-      "Repository": "CRAN",
+      "Repository": "RSPM",
       "Hash": "b418e8423699d11c7f2087c2bfd07da2",
       "Requirements": [
         "ggplot2",
@@ -1439,7 +1571,7 @@
       "Package": "crosstalk",
       "Version": "1.2.0",
       "Source": "Repository",
-      "Repository": "CRAN",
+      "Repository": "RSPM",
       "Hash": "6aa54f69598c32177e920eb3402e8293",
       "Requirements": [
         "R6",
@@ -1450,17 +1582,17 @@
     },
     "curl": {
       "Package": "curl",
-      "Version": "5.0.1",
+      "Version": "5.2.1",
       "Source": "Repository",
       "Repository": "CRAN",
-      "Hash": "2118af9cb164c8d2dddc7b89eaf732d9",
+      "Hash": "411ca2c03b1ce5f548345d2fc2685f7a",
       "Requirements": []
     },
     "data.table": {
       "Package": "data.table",
       "Version": "1.14.8",
       "Source": "Repository",
-      "Repository": "CRAN",
+      "Repository": "RSPM",
       "Hash": "b4c06e554f33344e044ccd7fdca750a9",
       "Requirements": []
     },
@@ -1468,7 +1600,7 @@
       "Package": "datawizard",
       "Version": "0.8.0",
       "Source": "Repository",
-      "Repository": "CRAN",
+      "Repository": "RSPM",
       "Hash": "b78bb7a4b7f2762630eb3a75269e6005",
       "Requirements": [
         "insight"
@@ -1478,7 +1610,7 @@
       "Package": "dbplyr",
       "Version": "2.3.3",
       "Source": "Repository",
-      "Repository": "CRAN",
+      "Repository": "RSPM",
       "Hash": "d6fd1b1440c1cacc6623aaa4e9fe352b",
       "Requirements": [
         "DBI",
@@ -1503,7 +1635,7 @@
       "Package": "deldir",
       "Version": "1.0-9",
       "Source": "Repository",
-      "Repository": "CRAN",
+      "Repository": "RSPM",
       "Hash": "81dc74aa2dbe87672a8f73934fcf2dae",
       "Requirements": []
     },
@@ -1511,7 +1643,7 @@
       "Package": "desc",
       "Version": "1.4.2",
       "Source": "Repository",
-      "Repository": "CRAN",
+      "Repository": "RSPM",
       "Hash": "6b9602c7ebbe87101a9c8edb6e8b6d21",
       "Requirements": [
         "R6",
@@ -1533,7 +1665,7 @@
       "Package": "digest",
       "Version": "0.6.33",
       "Source": "Repository",
-      "Repository": "CRAN",
+      "Repository": "RSPM",
       "Hash": "b18a9cf3c003977b0cc49d5e76ebe48d",
       "Requirements": []
     },
@@ -1547,6 +1679,14 @@
         "foreach",
         "iterators"
       ]
+    },
+    "dotCall64": {
+      "Package": "dotCall64",
+      "Version": "1.1-1",
+      "Source": "Repository",
+      "Repository": "CRAN",
+      "Hash": "80f374ef8500fcdc5d84a0345b837227",
+      "Requirements": []
     },
     "downloader": {
       "Package": "downloader",
@@ -1562,7 +1702,7 @@
       "Package": "dplyr",
       "Version": "1.1.2",
       "Source": "Repository",
-      "Repository": "CRAN",
+      "Repository": "RSPM",
       "Hash": "dea6970ff715ca541c387de363ff405e",
       "Requirements": [
         "R6",
@@ -1582,7 +1722,7 @@
       "Package": "dqrng",
       "Version": "0.3.0",
       "Source": "Repository",
-      "Repository": "CRAN",
+      "Repository": "RSPM",
       "Hash": "3ce2af5ead3b01c518fd453c7fe5a51a",
       "Requirements": [
         "BH",
@@ -1612,7 +1752,7 @@
       "Package": "effectsize",
       "Version": "0.8.3",
       "Source": "Repository",
-      "Repository": "CRAN",
+      "Repository": "RSPM",
       "Hash": "7e2f03436f6d34d7c856dc437b657274",
       "Requirements": [
         "bayestestR",
@@ -1636,12 +1776,13 @@
       "Package": "enrichplot",
       "Version": "1.18.4",
       "Source": "Bioconductor",
+      "RemoteType": "bioconductor",
       "Remotes": "YuLab-SMU/tidydr",
       "git_url": "https://git.bioconductor.org/packages/enrichplot",
       "git_branch": "RELEASE_3_16",
       "git_last_commit": "d85003b",
       "git_last_commit_date": "2023-04-02",
-      "Hash": "1c0dfd4d466a9c6f15caf6b1ba48a95b",
+      "Hash": "0434b67b38e5224eded9ca08522a1d5a",
       "Requirements": [
         "DOSE",
         "GOSemSim",
@@ -1666,7 +1807,7 @@
       "Package": "evaluate",
       "Version": "0.21",
       "Source": "Repository",
-      "Repository": "CRAN",
+      "Repository": "RSPM",
       "Hash": "d59f3b464e8da1aef82dc04b588b8dfb",
       "Requirements": []
     },
@@ -1678,11 +1819,21 @@
       "Hash": "790c46974d99ff51442f4d134b2d70eb",
       "Requirements": []
     },
+    "expm": {
+      "Package": "expm",
+      "Version": "1.0-0",
+      "Source": "Repository",
+      "Repository": "CRAN",
+      "Hash": "a44b2810f36c1cda5d52eee6ec96cafa",
+      "Requirements": [
+        "Matrix"
+      ]
+    },
     "fansi": {
       "Package": "fansi",
       "Version": "1.0.4",
       "Source": "Repository",
-      "Repository": "CRAN",
+      "Repository": "RSPM",
       "Hash": "1d9e7ad3c8312a192dea7d3db0274fde",
       "Requirements": []
     },
@@ -1692,6 +1843,26 @@
       "Source": "Repository",
       "Repository": "CRAN",
       "Hash": "8106d78941f34855c440ddb946b8f7a5",
+      "Requirements": []
+    },
+    "fastDummies": {
+      "Package": "fastDummies",
+      "Version": "1.7.3",
+      "Source": "Repository",
+      "Repository": "CRAN",
+      "Hash": "e0f9c0c051e0e8d89996d7f0c400539f",
+      "Requirements": [
+        "data.table",
+        "stringr",
+        "tibble"
+      ]
+    },
+    "fastICA": {
+      "Package": "fastICA",
+      "Version": "1.2-7",
+      "Source": "Repository",
+      "Repository": "CRAN",
+      "Hash": "0fe29aa70426d0d257b04ab20ca7fee4",
       "Requirements": []
     },
     "fastmap": {
@@ -1706,7 +1877,7 @@
       "Package": "fastmatch",
       "Version": "1.1-3",
       "Source": "Repository",
-      "Repository": "CRAN",
+      "Repository": "RSPM",
       "Hash": "dabc225759a2c2b241e60e42bf0e8e54",
       "Requirements": []
     },
@@ -1753,7 +1924,7 @@
       "Package": "fontawesome",
       "Version": "0.5.1",
       "Source": "Repository",
-      "Repository": "CRAN",
+      "Repository": "RSPM",
       "Hash": "1e22b8cabbad1eae951a75e9f8b52378",
       "Requirements": [
         "htmltools",
@@ -1825,7 +1996,7 @@
       "Package": "future",
       "Version": "1.33.0",
       "Source": "Repository",
-      "Repository": "CRAN",
+      "Repository": "RSPM",
       "Hash": "8e92c7bc53e91b9bb1faf9a6ef0e8514",
       "Requirements": [
         "digest",
@@ -1838,7 +2009,7 @@
       "Package": "future.apply",
       "Version": "1.11.0",
       "Source": "Repository",
-      "Repository": "CRAN",
+      "Repository": "RSPM",
       "Hash": "ba4be138fe47eac3e16a6deaa4da106e",
       "Requirements": [
         "future",
@@ -1908,7 +2079,7 @@
       "Package": "ggforce",
       "Version": "0.4.1",
       "Source": "Repository",
-      "Repository": "CRAN",
+      "Repository": "RSPM",
       "Hash": "a06503f54e227f79b45a72df2946a2d2",
       "Requirements": [
         "MASS",
@@ -1932,7 +2103,7 @@
       "Package": "ggfun",
       "Version": "0.1.1",
       "Source": "Repository",
-      "Repository": "CRAN",
+      "Repository": "RSPM",
       "Hash": "f31174df0168499f1aa33bc7f96bfc25",
       "Requirements": [
         "ggplot2",
@@ -1943,7 +2114,7 @@
       "Package": "ggnewscale",
       "Version": "0.4.9",
       "Source": "Repository",
-      "Repository": "CRAN",
+      "Repository": "RSPM",
       "Hash": "2d3ce9ca9737ecf195794c63fc40b990",
       "Requirements": [
         "ggplot2"
@@ -1951,10 +2122,10 @@
     },
     "ggplot2": {
       "Package": "ggplot2",
-      "Version": "3.4.2",
+      "Version": "3.5.1",
       "Source": "Repository",
-      "Repository": "CRAN",
-      "Hash": "3a147ee02e85a8941aad9909f1b43b7b",
+      "Repository": "RSPM",
+      "Hash": "44c6a2f8202d5b7e878ea274b1092426",
       "Requirements": [
         "MASS",
         "cli",
@@ -1974,7 +2145,7 @@
       "Package": "ggplotify",
       "Version": "0.1.1",
       "Source": "Repository",
-      "Repository": "CRAN",
+      "Repository": "RSPM",
       "Hash": "788dcf9b28f7bbe339338093c3654109",
       "Requirements": [
         "ggplot2",
@@ -2011,7 +2182,7 @@
       "Package": "ggraph",
       "Version": "2.1.0",
       "Source": "Repository",
-      "Repository": "CRAN",
+      "Repository": "RSPM",
       "Hash": "62672fd99df5df5814f442e9cd5ec29b",
       "Requirements": [
         "MASS",
@@ -2052,7 +2223,7 @@
       "Package": "ggrepel",
       "Version": "0.9.3",
       "Source": "Repository",
-      "Repository": "CRAN",
+      "Repository": "RSPM",
       "Hash": "92edfac53774706b4d6099f3ee6f6306",
       "Requirements": [
         "Rcpp",
@@ -2066,7 +2237,7 @@
       "Package": "ggridges",
       "Version": "0.5.4",
       "Source": "Repository",
-      "Repository": "CRAN",
+      "Repository": "RSPM",
       "Hash": "c76ee8fe60939384b9726128e38caea0",
       "Requirements": [
         "ggplot2",
@@ -2078,7 +2249,7 @@
       "Package": "ggsci",
       "Version": "3.0.0",
       "Source": "Repository",
-      "Repository": "CRAN",
+      "Repository": "RSPM",
       "Hash": "93664e03010c3f4b570c890dda99ade5",
       "Requirements": [
         "ggplot2",
@@ -2090,6 +2261,11 @@
       "Version": "0.6.4",
       "Source": "Repository",
       "Repository": "CRAN",
+      "RemoteType": "standard",
+      "RemotePkgRef": "ggsignif",
+      "RemoteRef": "ggsignif",
+      "RemoteRepos": "https://cloud.r-project.org",
+      "RemoteSha": "0.6.4",
       "Hash": "a57f0f5dbcfd0d77ad4ff33032f5dc79",
       "Requirements": [
         "ggplot2"
@@ -2112,12 +2288,13 @@
       "Package": "ggtree",
       "Version": "3.6.2",
       "Source": "Bioconductor",
+      "RemoteType": "bioconductor",
       "Remotes": "GuangchuangYu/treeio",
       "git_url": "https://git.bioconductor.org/packages/ggtree",
       "git_branch": "RELEASE_3_16",
       "git_last_commit": "431ec37",
       "git_last_commit_date": "2022-11-09",
-      "Hash": "87f158a81a3fe875f084692ce5544be6",
+      "Hash": "94008ba09158aa7d413f4170395af1ac",
       "Requirements": [
         "ape",
         "aplot",
@@ -2139,7 +2316,7 @@
       "Package": "globals",
       "Version": "0.16.2",
       "Source": "Repository",
-      "Repository": "CRAN",
+      "Repository": "RSPM",
       "Hash": "baa9585ab4ce47a9f4618e671778cc6f",
       "Requirements": [
         "codetools"
@@ -2149,7 +2326,7 @@
       "Package": "glue",
       "Version": "1.6.2",
       "Source": "Repository",
-      "Repository": "CRAN",
+      "Repository": "RSPM",
       "Hash": "4f2596dfb05dac67b9dc558e5c6fba2e",
       "Requirements": []
     },
@@ -2213,7 +2390,7 @@
       "Package": "gplots",
       "Version": "3.1.3",
       "Source": "Repository",
-      "Repository": "CRAN",
+      "Repository": "RSPM",
       "Hash": "75437dd4c43599f6e9418ea249495fda",
       "Requirements": [
         "KernSmooth",
@@ -2238,7 +2415,7 @@
       "Package": "graphlayouts",
       "Version": "1.0.0",
       "Source": "Repository",
-      "Repository": "CRAN",
+      "Repository": "RSPM",
       "Hash": "8e6e2044b72071ae7ea601808887423c",
       "Requirements": [
         "Rcpp",
@@ -2251,6 +2428,11 @@
       "Version": "2.3",
       "Source": "Repository",
       "Repository": "CRAN",
+      "RemoteType": "standard",
+      "RemotePkgRef": "gridExtra",
+      "RemoteRef": "gridExtra",
+      "RemoteRepos": "https://cloud.r-project.org",
+      "RemoteSha": "2.3",
       "Hash": "7d7f283939f563670a697165b2cf5560",
       "Requirements": [
         "gtable"
@@ -2303,10 +2485,10 @@
     },
     "gtable": {
       "Package": "gtable",
-      "Version": "0.3.3",
+      "Version": "0.3.6",
       "Source": "Repository",
       "Repository": "CRAN",
-      "Hash": "b44addadb528a0d227794121c00572a0",
+      "Hash": "de949855009e2d4d0e52a844e30617ae",
       "Requirements": [
         "cli",
         "glue",
@@ -2318,7 +2500,7 @@
       "Package": "gtools",
       "Version": "3.9.4",
       "Source": "Repository",
-      "Repository": "CRAN",
+      "Repository": "RSPM",
       "Hash": "88bb96eaf7140cdf29e374ef74182220",
       "Requirements": []
     },
@@ -2326,7 +2508,7 @@
       "Package": "haven",
       "Version": "2.5.3",
       "Source": "Repository",
-      "Repository": "CRAN",
+      "Repository": "RSPM",
       "Hash": "9b302fe352f9cfc5dcf0a4139af3a565",
       "Requirements": [
         "cli",
@@ -2376,14 +2558,13 @@
     },
     "htmltools": {
       "Package": "htmltools",
-      "Version": "0.5.5",
+      "Version": "0.5.8.1",
       "Source": "Repository",
       "Repository": "CRAN",
-      "Hash": "ba0240784ad50a62165058a27459304a",
+      "Hash": "81d371a9cc60640e74e4ab6ac46dcedc",
       "Requirements": [
         "base64enc",
         "digest",
-        "ellipsis",
         "fastmap",
         "rlang"
       ]
@@ -2392,7 +2573,7 @@
       "Package": "htmlwidgets",
       "Version": "1.6.2",
       "Source": "Repository",
-      "Repository": "CRAN",
+      "Repository": "RSPM",
       "Hash": "a865aa85bcb2697f47505bfd70422471",
       "Requirements": [
         "htmltools",
@@ -2406,7 +2587,7 @@
       "Package": "httpuv",
       "Version": "1.6.11",
       "Source": "Repository",
-      "Repository": "CRAN",
+      "Repository": "RSPM",
       "Hash": "838602f54e32c1a0f8cc80708cefcefa",
       "Requirements": [
         "R6",
@@ -2419,7 +2600,7 @@
       "Package": "httr",
       "Version": "1.4.6",
       "Source": "Repository",
-      "Repository": "CRAN",
+      "Repository": "RSPM",
       "Hash": "7e5e3cbd2a7bc07880c94e22348fb661",
       "Requirements": [
         "R6",
@@ -2452,7 +2633,7 @@
       "Package": "igraph",
       "Version": "1.5.0.1",
       "Source": "Repository",
-      "Repository": "CRAN",
+      "Repository": "RSPM",
       "Hash": "08352b502db2eae1e46364de6e6421f4",
       "Requirements": [
         "Matrix",
@@ -2467,8 +2648,16 @@
       "Package": "insight",
       "Version": "0.19.3",
       "Source": "Repository",
-      "Repository": "CRAN",
+      "Repository": "RSPM",
       "Hash": "e605299a4e3d10404ac7989b05c4a917",
+      "Requirements": []
+    },
+    "iotools": {
+      "Package": "iotools",
+      "Version": "0.3-5",
+      "Source": "Repository",
+      "Repository": "CRAN",
+      "Hash": "f58181e7f6df59de0edb6504ac19da58",
       "Requirements": []
     },
     "irlba": {
@@ -2519,7 +2708,7 @@
       "Package": "jsonlite",
       "Version": "1.8.7",
       "Source": "Repository",
-      "Repository": "CRAN",
+      "Repository": "RSPM",
       "Hash": "266a20443ca13c65688b2116d5220f76",
       "Requirements": []
     },
@@ -2537,7 +2726,7 @@
       "Package": "knitr",
       "Version": "1.43",
       "Source": "Repository",
-      "Repository": "CRAN",
+      "Repository": "RSPM",
       "Hash": "9775eb076713f627c07ce41d8199d8f6",
       "Requirements": [
         "evaluate",
@@ -2550,7 +2739,7 @@
       "Package": "labeling",
       "Version": "0.4.2",
       "Source": "Repository",
-      "Repository": "CRAN",
+      "Repository": "RSPM",
       "Hash": "3d5108641f47470611a32d0bdf357a72",
       "Requirements": []
     },
@@ -2568,7 +2757,7 @@
       "Package": "later",
       "Version": "1.3.1",
       "Source": "Repository",
-      "Repository": "CRAN",
+      "Repository": "RSPM",
       "Hash": "40401c9cf2bc2259dfe83311c9384710",
       "Requirements": [
         "Rcpp",
@@ -2595,7 +2784,7 @@
       "Package": "leiden",
       "Version": "0.4.3",
       "Source": "Repository",
-      "Repository": "CRAN",
+      "Repository": "RSPM",
       "Hash": "3ddd87b156152001d3ab82979808af00",
       "Requirements": [
         "Matrix",
@@ -2607,7 +2796,7 @@
       "Package": "lifecycle",
       "Version": "1.0.3",
       "Source": "Repository",
-      "Repository": "CRAN",
+      "Repository": "RSPM",
       "Hash": "001cecbeac1cff9301bdc3775ee46a86",
       "Requirements": [
         "cli",
@@ -2631,7 +2820,7 @@
       "Package": "listenv",
       "Version": "0.9.0",
       "Source": "Repository",
-      "Repository": "CRAN",
+      "Repository": "RSPM",
       "Hash": "4fbd3679ec8ee169ba28d4b1ea7d0e8f",
       "Requirements": []
     },
@@ -2639,7 +2828,7 @@
       "Package": "lme4",
       "Version": "1.1-34",
       "Source": "Repository",
-      "Repository": "CRAN",
+      "Repository": "RSPM",
       "Hash": "73ed88b282d27d4cf3d89b744aa21217",
       "Requirements": [
         "MASS",
@@ -2667,17 +2856,25 @@
       "Package": "locfit",
       "Version": "1.5-9.8",
       "Source": "Repository",
-      "Repository": "CRAN",
+      "Repository": "RSPM",
       "Hash": "3434988413fbabfdb0fcd6067d7e1aa4",
       "Requirements": [
         "lattice"
       ]
     },
+    "logging": {
+      "Package": "logging",
+      "Version": "0.10-108",
+      "Source": "Repository",
+      "Repository": "CRAN",
+      "Hash": "fbef2ca79e23f11e033e89317b4c4770",
+      "Requirements": []
+    },
     "lubridate": {
       "Package": "lubridate",
       "Version": "1.9.2",
       "Source": "Repository",
-      "Repository": "CRAN",
+      "Repository": "RSPM",
       "Hash": "e25f18436e3efd42c7c590a1c4c15390",
       "Requirements": [
         "generics",
@@ -2692,11 +2889,19 @@
       "Hash": "7ce2733a9826b3aeb1775d56fd305472",
       "Requirements": []
     },
+    "maps": {
+      "Package": "maps",
+      "Version": "3.4.3",
+      "Source": "Repository",
+      "Repository": "CRAN",
+      "Hash": "fd17b77df6edadecf2fe08382c5a2eb1",
+      "Requirements": []
+    },
     "markdown": {
       "Package": "markdown",
       "Version": "1.7",
       "Source": "Repository",
-      "Repository": "CRAN",
+      "Repository": "RSPM",
       "Hash": "0ffaea87c070a56d140ce00b0727b278",
       "Requirements": [
         "commonmark",
@@ -2707,7 +2912,7 @@
       "Package": "matrixStats",
       "Version": "1.0.0",
       "Source": "Repository",
-      "Repository": "CRAN",
+      "Repository": "RSPM",
       "Hash": "9143629fd64335aac6a6250d1c1ed82a",
       "Requirements": []
     },
@@ -2721,6 +2926,14 @@
         "exactRankTests",
         "mvtnorm"
       ]
+    },
+    "mclust": {
+      "Package": "mclust",
+      "Version": "6.1.2",
+      "Source": "Repository",
+      "Repository": "CRAN",
+      "Hash": "61a228820efaf914579af7a9ebafa85b",
+      "Requirements": []
     },
     "memoise": {
       "Package": "memoise",
@@ -2737,7 +2950,7 @@
       "Package": "mgcv",
       "Version": "1.8-41",
       "Source": "Repository",
-      "Repository": "CRAN",
+      "Repository": "RSPM",
       "Hash": "6b3904f13346742caa3e82dd0303d4ad",
       "Requirements": [
         "Matrix",
@@ -2767,17 +2980,25 @@
       "Package": "minqa",
       "Version": "1.2.5",
       "Source": "Repository",
-      "Repository": "CRAN",
+      "Repository": "RSPM",
       "Hash": "587ce77fd3c7bada7eadb2d18b62930d",
       "Requirements": [
         "Rcpp"
       ]
     },
+    "mnormt": {
+      "Package": "mnormt",
+      "Version": "2.1.1",
+      "Source": "Repository",
+      "Repository": "CRAN",
+      "Hash": "c83992ef63553d1e4b97162a4a753470",
+      "Requirements": []
+    },
     "modelbased": {
       "Package": "modelbased",
       "Version": "0.8.6",
       "Source": "Repository",
-      "Repository": "CRAN",
+      "Repository": "RSPM",
       "Hash": "60a0171d055dc3122d7d2b6ed31e8003",
       "Requirements": [
         "bayestestR",
@@ -2820,21 +3041,11 @@
         "tidyselect"
       ]
     },
-    "munsell": {
-      "Package": "munsell",
-      "Version": "0.5.0",
-      "Source": "Repository",
-      "Repository": "CRAN",
-      "Hash": "6dfe8bf774944bd5595785e3229d8771",
-      "Requirements": [
-        "colorspace"
-      ]
-    },
     "mvtnorm": {
       "Package": "mvtnorm",
       "Version": "1.2-2",
       "Source": "Repository",
-      "Repository": "CRAN",
+      "Repository": "RSPM",
       "Hash": "ef6270cb713747aa8211620d6a47188d",
       "Requirements": []
     },
@@ -2842,7 +3053,7 @@
       "Package": "nlme",
       "Version": "3.1-161",
       "Source": "Repository",
-      "Repository": "CRAN",
+      "Repository": "RSPM",
       "Hash": "b49e163093c0ef46fbbfc40bcb87916c",
       "Requirements": [
         "lattice"
@@ -2862,7 +3073,7 @@
       "Package": "nnet",
       "Version": "7.3-18",
       "Source": "Repository",
-      "Repository": "CRAN",
+      "Repository": "RSPM",
       "Hash": "170da2130d5332bea7d6ede01875ba1d",
       "Requirements": []
     },
@@ -2878,11 +3089,19 @@
       "Package": "openssl",
       "Version": "2.1.0",
       "Source": "Repository",
-      "Repository": "CRAN",
+      "Repository": "RSPM",
       "Hash": "273a6bb4a9844c296a459d2176673270",
       "Requirements": [
         "askpass"
       ]
+    },
+    "optimParallel": {
+      "Package": "optimParallel",
+      "Version": "1.0-2",
+      "Source": "Repository",
+      "Repository": "CRAN",
+      "Hash": "5a15e068f0bd9bac4252f8f9e11dc79f",
+      "Requirements": []
     },
     "org.Mm.eg.db": {
       "Package": "org.Mm.eg.db",
@@ -2897,7 +3116,7 @@
       "Package": "parallelly",
       "Version": "1.36.0",
       "Source": "Repository",
-      "Repository": "CRAN",
+      "Repository": "RSPM",
       "Hash": "bca377e1c87ec89ebed77bba00635b2e",
       "Requirements": []
     },
@@ -2905,7 +3124,7 @@
       "Package": "parameters",
       "Version": "0.21.1",
       "Source": "Repository",
-      "Repository": "CRAN",
+      "Repository": "RSPM",
       "Hash": "8694e865941e3d79a29122f60a74249b",
       "Requirements": [
         "bayestestR",
@@ -2917,7 +3136,7 @@
       "Package": "patchwork",
       "Version": "1.1.2",
       "Source": "Repository",
-      "Repository": "CRAN",
+      "Repository": "RSPM",
       "Hash": "63b611e9d909a9ed057639d9c3b77152",
       "Requirements": [
         "ggplot2",
@@ -2947,16 +3166,49 @@
         "numDeriv"
       ]
     },
+    "pbmcapply": {
+      "Package": "pbmcapply",
+      "Version": "1.5.1",
+      "Source": "Repository",
+      "Repository": "CRAN",
+      "Hash": "bf173fb42b60f8f404f7a9f9c3f95d0d",
+      "Requirements": []
+    },
     "performance": {
       "Package": "performance",
       "Version": "0.10.4",
       "Source": "Repository",
-      "Repository": "CRAN",
+      "Repository": "RSPM",
       "Hash": "c7bd3750eea3b3f5b2fdd56f22af151a",
       "Requirements": [
         "bayestestR",
         "datawizard",
         "insight"
+      ]
+    },
+    "permute": {
+      "Package": "permute",
+      "Version": "0.9-8",
+      "Source": "Repository",
+      "Repository": "CRAN",
+      "Hash": "82f0c2fd6920132a30b22eac82793f90",
+      "Requirements": []
+    },
+    "phangorn": {
+      "Package": "phangorn",
+      "Version": "2.12.1",
+      "Source": "Repository",
+      "Repository": "CRAN",
+      "Hash": "eea536597b96f3df44a2d6b963ac280e",
+      "Requirements": [
+        "Matrix",
+        "Rcpp",
+        "ape",
+        "digest",
+        "fastmatch",
+        "generics",
+        "igraph",
+        "quadprog"
       ]
     },
     "pheatmap": {
@@ -2969,6 +3221,31 @@
         "RColorBrewer",
         "gtable",
         "scales"
+      ]
+    },
+    "phytools": {
+      "Package": "phytools",
+      "Version": "2.5-2",
+      "Source": "Repository",
+      "Repository": "CRAN",
+      "Hash": "f6ac05b2c44e3b5136fe8d03042a5463",
+      "Requirements": [
+        "DEoptim",
+        "MASS",
+        "ape",
+        "clusterGeneration",
+        "coda",
+        "combinat",
+        "doParallel",
+        "expm",
+        "foreach",
+        "maps",
+        "mnormt",
+        "nlme",
+        "numDeriv",
+        "optimParallel",
+        "phangorn",
+        "scatterplot3d"
       ]
     },
     "pillar": {
@@ -2992,6 +3269,11 @@
       "Version": "2.0.3",
       "Source": "Repository",
       "Repository": "CRAN",
+      "RemoteType": "standard",
+      "RemotePkgRef": "pkgconfig",
+      "RemoteRef": "pkgconfig",
+      "RemoteRepos": "https://cloud.r-project.org",
+      "RemoteSha": "2.0.3",
       "Hash": "01f28d4278f15c76cddbea05899c5d6f",
       "Requirements": []
     },
@@ -2999,7 +3281,7 @@
       "Package": "pkgload",
       "Version": "1.3.2.1",
       "Source": "Repository",
-      "Repository": "CRAN",
+      "Repository": "RSPM",
       "Hash": "a7f498a1b2a4a6816148e498509f6e1d",
       "Requirements": [
         "cli",
@@ -3024,7 +3306,7 @@
       "Package": "plotly",
       "Version": "4.10.2",
       "Source": "Repository",
-      "Repository": "CRAN",
+      "Repository": "RSPM",
       "Hash": "6c00a09ba7d34917d9a3e28b15dd74e3",
       "Requirements": [
         "RColorBrewer",
@@ -3050,11 +3332,33 @@
         "viridisLite"
       ]
     },
+    "plumber": {
+      "Package": "plumber",
+      "Version": "1.3.1",
+      "Source": "Repository",
+      "Repository": "CRAN",
+      "Hash": "24838575b8cde046184da5c7c451682f",
+      "Requirements": [
+        "R6",
+        "crayon",
+        "httpuv",
+        "jsonlite",
+        "lifecycle",
+        "magrittr",
+        "mime",
+        "promises",
+        "rlang",
+        "sodium",
+        "stringi",
+        "swagger",
+        "webutils"
+      ]
+    },
     "plyr": {
       "Package": "plyr",
       "Version": "1.8.8",
       "Source": "Repository",
-      "Repository": "CRAN",
+      "Repository": "RSPM",
       "Hash": "d744387aef9047b0b48be2933d78e862",
       "Requirements": [
         "Rcpp"
@@ -3072,7 +3376,7 @@
       "Package": "polyclip",
       "Version": "1.10-4",
       "Source": "Repository",
-      "Repository": "CRAN",
+      "Repository": "RSPM",
       "Hash": "66bbfa06f78108ee967220643596c91e",
       "Requirements": []
     },
@@ -3081,6 +3385,11 @@
       "Version": "1.4-1",
       "Source": "Repository",
       "Repository": "CRAN",
+      "RemoteType": "standard",
+      "RemotePkgRef": "polynom",
+      "RemoteRef": "polynom",
+      "RemoteRepos": "https://cloud.r-project.org",
+      "RemoteSha": "1.4-1",
       "Hash": "ceb5c2a59ba33d42d051285a3e8a5118",
       "Requirements": []
     },
@@ -3104,7 +3413,7 @@
       "Package": "processx",
       "Version": "3.8.2",
       "Source": "Repository",
-      "Repository": "CRAN",
+      "Repository": "RSPM",
       "Hash": "3efbd8ac1be0296a46c55387aeace0f3",
       "Requirements": [
         "R6",
@@ -3115,7 +3424,7 @@
       "Package": "progress",
       "Version": "1.2.2",
       "Source": "Repository",
-      "Repository": "CRAN",
+      "Repository": "RSPM",
       "Hash": "14dc9f7a3c91ebb14ec5bb9208a07061",
       "Requirements": [
         "R6",
@@ -3128,7 +3437,7 @@
       "Package": "progressr",
       "Version": "0.13.0",
       "Source": "Repository",
-      "Repository": "CRAN",
+      "Repository": "RSPM",
       "Hash": "376a8ebcc878f9c1395e212548fc297a",
       "Requirements": [
         "digest"
@@ -3138,7 +3447,7 @@
       "Package": "promises",
       "Version": "1.2.0.1",
       "Source": "Repository",
-      "Repository": "CRAN",
+      "Repository": "RSPM",
       "Hash": "4ab2c43adb4d4699cf3690acd378d75d",
       "Requirements": [
         "R6",
@@ -3152,7 +3461,7 @@
       "Package": "ps",
       "Version": "1.7.5",
       "Source": "Repository",
-      "Repository": "CRAN",
+      "Repository": "RSPM",
       "Hash": "709d852d33178db54b17c722e5b1e594",
       "Requirements": []
     },
@@ -3160,7 +3469,7 @@
       "Package": "purrr",
       "Version": "1.0.1",
       "Source": "Repository",
-      "Repository": "CRAN",
+      "Repository": "RSPM",
       "Hash": "d71c815267c640f17ddbf7f16144b4bb",
       "Requirements": [
         "cli",
@@ -3170,11 +3479,19 @@
         "vctrs"
       ]
     },
+    "quadprog": {
+      "Package": "quadprog",
+      "Version": "1.5-8",
+      "Source": "Repository",
+      "Repository": "CRAN",
+      "Hash": "5f919ae5e7f83a6f91dcf2288943370d",
+      "Requirements": []
+    },
     "quantreg": {
       "Package": "quantreg",
       "Version": "5.96",
       "Source": "Repository",
-      "Repository": "CRAN",
+      "Repository": "RSPM",
       "Hash": "47a0047c3082b2a285434db2eb418dcc",
       "Requirements": [
         "MASS",
@@ -3202,7 +3519,7 @@
       "Package": "ragg",
       "Version": "1.2.5",
       "Source": "Repository",
-      "Repository": "CRAN",
+      "Repository": "RSPM",
       "Hash": "690bc058ea2b1b8a407d3cfe3dce3ef9",
       "Requirements": [
         "systemfonts",
@@ -3217,11 +3534,19 @@
       "Hash": "5e3c5dc0b071b21fa128676560dbe94d",
       "Requirements": []
     },
+    "rbibutils": {
+      "Package": "rbibutils",
+      "Version": "2.4",
+      "Source": "Repository",
+      "Repository": "CRAN",
+      "Hash": "a8aa7c707b1e81d3b5677600a46f0d6b",
+      "Requirements": []
+    },
     "readr": {
       "Package": "readr",
       "Version": "2.1.4",
       "Source": "Repository",
-      "Repository": "CRAN",
+      "Repository": "RSPM",
       "Hash": "b5047343b3825f37ad9d3b5d89aa1078",
       "Requirements": [
         "R6",
@@ -3250,6 +3575,17 @@
         "tibble"
       ]
     },
+    "reformulas": {
+      "Package": "reformulas",
+      "Version": "0.4.3",
+      "Source": "Repository",
+      "Repository": "CRAN",
+      "Hash": "eb60a8829a244092879057fbb05dfe17",
+      "Requirements": [
+        "Matrix",
+        "Rdpack"
+      ]
+    },
     "rematch": {
       "Package": "rematch",
       "Version": "1.0.1",
@@ -3272,7 +3608,7 @@
       "Package": "renv",
       "Version": "0.16.0",
       "Source": "Repository",
-      "Repository": "CRAN",
+      "Repository": "RSPM",
       "Hash": "c9e8442ab69bc21c9697ecf856c1e6c7",
       "Requirements": []
     },
@@ -3280,7 +3616,7 @@
       "Package": "reprex",
       "Version": "2.0.2",
       "Source": "Repository",
-      "Repository": "CRAN",
+      "Repository": "RSPM",
       "Hash": "d66fe009d4c20b7ab1927eb405db9ee2",
       "Requirements": [
         "callr",
@@ -3312,7 +3648,7 @@
       "Package": "reticulate",
       "Version": "1.30",
       "Source": "Repository",
-      "Repository": "CRAN",
+      "Repository": "RSPM",
       "Hash": "103e4814f4a7a3eb9fb28adf52bf1586",
       "Requirements": [
         "Matrix",
@@ -3363,17 +3699,22 @@
     },
     "rlang": {
       "Package": "rlang",
-      "Version": "1.1.1",
+      "Version": "1.1.6",
       "Source": "Repository",
       "Repository": "CRAN",
-      "Hash": "a85c767b55f0bf9b7ad16c6d7baee5bb",
+      "RemoteType": "standard",
+      "RemotePkgRef": "rlang",
+      "RemoteRef": "rlang",
+      "RemoteRepos": "https://cloud.r-project.org",
+      "RemoteSha": "1.1.6",
+      "Hash": "892124978869b74935dc3934c42bfe5a",
       "Requirements": []
     },
     "rmarkdown": {
       "Package": "rmarkdown",
       "Version": "2.23",
       "Source": "Repository",
-      "Repository": "CRAN",
+      "Repository": "RSPM",
       "Hash": "79f14e53725f28900d936f692bfdd69f",
       "Requirements": [
         "bslib",
@@ -3393,7 +3734,7 @@
       "Package": "rprojroot",
       "Version": "2.0.3",
       "Source": "Repository",
-      "Repository": "CRAN",
+      "Repository": "RSPM",
       "Hash": "1de7ab598047a87bba48434ba35d497d",
       "Requirements": []
     },
@@ -3439,7 +3780,7 @@
       "Package": "rvest",
       "Version": "1.0.3",
       "Source": "Repository",
-      "Repository": "CRAN",
+      "Repository": "RSPM",
       "Hash": "a4a5ac819a467808c60e36e92ddf195e",
       "Requirements": [
         "cli",
@@ -3456,10 +3797,10 @@
     },
     "sass": {
       "Package": "sass",
-      "Version": "0.4.7",
+      "Version": "0.4.9",
       "Source": "Repository",
       "Repository": "CRAN",
-      "Hash": "6bd4d33b50ff927191ec9acbf52fd056",
+      "Hash": "d53dbfddf695303ea4ad66f86e99b95d",
       "Requirements": [
         "R6",
         "fs",
@@ -3470,17 +3811,18 @@
     },
     "scales": {
       "Package": "scales",
-      "Version": "1.2.1",
+      "Version": "1.4.0",
       "Source": "Repository",
       "Repository": "CRAN",
-      "Hash": "906cb23d2f1c5680b8ce439b44c6fa63",
+      "Hash": "c5bba8f0d1df8c4b9538a40570798d9b",
       "Requirements": [
         "R6",
         "RColorBrewer",
+        "cli",
         "farver",
+        "glue",
         "labeling",
         "lifecycle",
-        "munsell",
         "rlang",
         "viridisLite"
       ]
@@ -3536,7 +3878,7 @@
       "Package": "scatterpie",
       "Version": "0.2.1",
       "Source": "Repository",
-      "Repository": "CRAN",
+      "Repository": "RSPM",
       "Hash": "a272b0f2f06b3aa01fa4f5a033f0cf4a",
       "Requirements": [
         "dplyr",
@@ -3547,12 +3889,20 @@
         "tidyr"
       ]
     },
-    "sctransform": {
-      "Package": "sctransform",
-      "Version": "0.3.5",
+    "scatterplot3d": {
+      "Package": "scatterplot3d",
+      "Version": "0.3-44",
       "Source": "Repository",
       "Repository": "CRAN",
-      "Hash": "e70cffc72eb877eb06e86a20097e93af",
+      "Hash": "10ee4b91ec812690bd55d9bf51edccee",
+      "Requirements": []
+    },
+    "sctransform": {
+      "Package": "sctransform",
+      "Version": "0.4.1",
+      "Source": "Repository",
+      "Repository": "CRAN",
+      "Hash": "0242402f321be0246fb67cf8c63b3572",
       "Requirements": [
         "MASS",
         "Matrix",
@@ -3596,7 +3946,7 @@
       "Package": "see",
       "Version": "0.8.0",
       "Source": "Repository",
-      "Repository": "CRAN",
+      "Repository": "RSPM",
       "Hash": "7d400d1615814add7e3b59cfef306e03",
       "Requirements": [
         "bayestestR",
@@ -3625,7 +3975,7 @@
       "Package": "shadowtext",
       "Version": "0.1.2",
       "Source": "Repository",
-      "Repository": "CRAN",
+      "Repository": "RSPM",
       "Hash": "e639c0fa75fc71085c37e21e05a06e41",
       "Requirements": [
         "ggplot2",
@@ -3636,7 +3986,7 @@
       "Package": "shape",
       "Version": "1.4.6",
       "Source": "Repository",
-      "Repository": "CRAN",
+      "Repository": "RSPM",
       "Hash": "9067f962730f58b14d8ae54ca885509f",
       "Requirements": []
     },
@@ -3644,7 +3994,7 @@
       "Package": "shiny",
       "Version": "1.7.4.1",
       "Source": "Repository",
-      "Repository": "CRAN",
+      "Repository": "RSPM",
       "Hash": "f7f201522eedbc95f10ef323b100ff29",
       "Requirements": [
         "R6",
@@ -3687,6 +4037,14 @@
       "Hash": "40b74690debd20c57d93d8c246b305d4",
       "Requirements": []
     },
+    "sodium": {
+      "Package": "sodium",
+      "Version": "1.4.0",
+      "Source": "Repository",
+      "Repository": "CRAN",
+      "Hash": "ae00d33a499e429a04409bc1167c4995",
+      "Requirements": []
+    },
     "sourcetools": {
       "Package": "sourcetools",
       "Version": "0.1.7-1",
@@ -3699,10 +4057,21 @@
       "Package": "sp",
       "Version": "2.0-0",
       "Source": "Repository",
-      "Repository": "CRAN",
+      "Repository": "RSPM",
       "Hash": "2551981e6f85d59c81652bf654d6c3ca",
       "Requirements": [
         "lattice"
+      ]
+    },
+    "spam": {
+      "Package": "spam",
+      "Version": "2.10-0",
+      "Source": "Repository",
+      "Repository": "CRAN",
+      "Hash": "ffe1f9e95a4375530747b268f82b5086",
+      "Requirements": [
+        "Rcpp",
+        "dotCall64"
       ]
     },
     "sparseMatrixStats": {
@@ -3721,11 +4090,21 @@
         "matrixStats"
       ]
     },
+    "sparsesvd": {
+      "Package": "sparsesvd",
+      "Version": "0.2-3",
+      "Source": "Repository",
+      "Repository": "CRAN",
+      "Hash": "b0cb4fc392ab3dbdd7bcad0a45a56999",
+      "Requirements": [
+        "Matrix"
+      ]
+    },
     "spatstat.data": {
       "Package": "spatstat.data",
       "Version": "3.0-1",
       "Source": "Repository",
-      "Repository": "CRAN",
+      "Repository": "RSPM",
       "Hash": "8a96bb2ac0b8e9a92823e0850ae73610",
       "Requirements": [
         "Matrix",
@@ -3736,7 +4115,7 @@
       "Package": "spatstat.explore",
       "Version": "3.2-1",
       "Source": "Repository",
-      "Repository": "CRAN",
+      "Repository": "RSPM",
       "Hash": "f9b98227d01e96fa376993c3c8a0a66a",
       "Requirements": [
         "Matrix",
@@ -3754,7 +4133,7 @@
       "Package": "spatstat.geom",
       "Version": "3.2-4",
       "Source": "Repository",
-      "Repository": "CRAN",
+      "Repository": "RSPM",
       "Hash": "e32e25b255050f06f57be4a16d443228",
       "Requirements": [
         "deldir",
@@ -3767,7 +4146,7 @@
       "Package": "spatstat.random",
       "Version": "3.1-5",
       "Source": "Repository",
-      "Repository": "CRAN",
+      "Repository": "RSPM",
       "Hash": "94feb301acc779a9d41b89aac9c2b78d",
       "Requirements": [
         "spatstat.data",
@@ -3779,7 +4158,7 @@
       "Package": "spatstat.sparse",
       "Version": "3.0-2",
       "Source": "Repository",
-      "Repository": "CRAN",
+      "Repository": "RSPM",
       "Hash": "82a7d5a77f165b08dae877ef98dc6fcc",
       "Requirements": [
         "Matrix",
@@ -3792,7 +4171,7 @@
       "Package": "spatstat.utils",
       "Version": "3.0-3",
       "Source": "Repository",
-      "Repository": "CRAN",
+      "Repository": "RSPM",
       "Hash": "8f9764a85e3ca99604625f7ab6012418",
       "Requirements": []
     },
@@ -3800,7 +4179,7 @@
       "Package": "stringi",
       "Version": "1.7.12",
       "Source": "Repository",
-      "Repository": "CRAN",
+      "Repository": "RSPM",
       "Hash": "ca8bd84263c77310739d2cf64d84d7c9",
       "Requirements": []
     },
@@ -3808,7 +4187,7 @@
       "Package": "stringr",
       "Version": "1.5.0",
       "Source": "Repository",
-      "Repository": "CRAN",
+      "Repository": "RSPM",
       "Hash": "671a4d384ae9d32fc47a14e98bfa3dc8",
       "Requirements": [
         "cli",
@@ -3842,7 +4221,7 @@
       "Package": "survival",
       "Version": "3.5-0",
       "Source": "Repository",
-      "Repository": "CRAN",
+      "Repository": "RSPM",
       "Hash": "db758f6f1e367f04222c745ca0260b8a",
       "Requirements": [
         "Matrix"
@@ -3872,6 +4251,14 @@
         "tidyr"
       ]
     },
+    "swagger": {
+      "Package": "swagger",
+      "Version": "5.17.14.1",
+      "Source": "Repository",
+      "Repository": "CRAN",
+      "Hash": "cd09053b2f1e87c0fa6c1c470e54ebb8",
+      "Requirements": []
+    },
     "sys": {
       "Package": "sys",
       "Version": "3.4.2",
@@ -3884,7 +4271,7 @@
       "Package": "systemfonts",
       "Version": "1.0.4",
       "Source": "Repository",
-      "Repository": "CRAN",
+      "Repository": "RSPM",
       "Hash": "90b28393209827327de889f49935140a",
       "Requirements": [
         "cpp11"
@@ -3900,10 +4287,10 @@
     },
     "testthat": {
       "Package": "testthat",
-      "Version": "3.1.10",
+      "Version": "3.2.1.1",
       "Source": "Repository",
       "Repository": "CRAN",
-      "Hash": "6f403dc49295610a3a67ea1a9ca64346",
+      "Hash": "3f6e7e5e2220856ff865e4834766bf2b",
       "Requirements": [
         "R6",
         "brio",
@@ -3911,7 +4298,6 @@
         "cli",
         "desc",
         "digest",
-        "ellipsis",
         "evaluate",
         "jsonlite",
         "lifecycle",
@@ -3929,7 +4315,7 @@
       "Package": "textshaping",
       "Version": "0.3.6",
       "Source": "Repository",
-      "Repository": "CRAN",
+      "Repository": "RSPM",
       "Hash": "1ab6223d3670fac7143202cb6a2d43d5",
       "Requirements": [
         "cpp11",
@@ -3956,7 +4342,7 @@
       "Package": "tidygraph",
       "Version": "1.2.3",
       "Source": "Repository",
-      "Repository": "CRAN",
+      "Repository": "RSPM",
       "Hash": "0fc97a52b4b32a0b4a3de4c5241348e2",
       "Requirements": [
         "R6",
@@ -3975,7 +4361,7 @@
       "Package": "tidyr",
       "Version": "1.3.0",
       "Source": "Repository",
-      "Repository": "CRAN",
+      "Repository": "RSPM",
       "Hash": "e47debdc7ce599b070c8e78e8ac0cfcf",
       "Requirements": [
         "cli",
@@ -3996,7 +4382,7 @@
       "Package": "tidyselect",
       "Version": "1.2.0",
       "Source": "Repository",
-      "Repository": "CRAN",
+      "Repository": "RSPM",
       "Hash": "79540e5fcd9e0435af547d885f184fd5",
       "Requirements": [
         "cli",
@@ -4011,7 +4397,7 @@
       "Package": "tidytree",
       "Version": "0.4.4",
       "Source": "Repository",
-      "Repository": "CRAN",
+      "Repository": "RSPM",
       "Hash": "738ba063f5808e2249878cd1642bdd50",
       "Requirements": [
         "ape",
@@ -4070,7 +4456,7 @@
       "Package": "timechange",
       "Version": "0.2.0",
       "Source": "Repository",
-      "Repository": "CRAN",
+      "Repository": "RSPM",
       "Hash": "8548b44f79a35ba1791308b61e6012d7",
       "Requirements": [
         "cpp11"
@@ -4080,7 +4466,7 @@
       "Package": "tinytex",
       "Version": "0.45",
       "Source": "Repository",
-      "Repository": "CRAN",
+      "Repository": "RSPM",
       "Hash": "e4e357f28c2edff493936b6cb30c3d65",
       "Requirements": [
         "xfun"
@@ -4109,7 +4495,7 @@
       "Package": "tweenr",
       "Version": "2.0.2",
       "Source": "Repository",
-      "Repository": "CRAN",
+      "Repository": "RSPM",
       "Hash": "c16efcef4c72d3bff5e65031f3f1f841",
       "Requirements": [
         "cpp11",
@@ -4129,11 +4515,28 @@
         "cpp11"
       ]
     },
+    "unmarked": {
+      "Package": "unmarked",
+      "Version": "1.5.1",
+      "Source": "Repository",
+      "Repository": "CRAN",
+      "Hash": "0d6c80c93b5f0a061179cfa2be222f3e",
+      "Requirements": [
+        "MASS",
+        "Matrix",
+        "Rcpp",
+        "RcppArmadillo",
+        "RcppEigen",
+        "TMB",
+        "lattice",
+        "reformulas"
+      ]
+    },
     "utf8": {
       "Package": "utf8",
       "Version": "1.2.3",
       "Source": "Repository",
-      "Repository": "CRAN",
+      "Repository": "RSPM",
       "Hash": "1fe17157424bb09c48a8b3b550c753bc",
       "Requirements": []
     },
@@ -4141,7 +4544,7 @@
       "Package": "uuid",
       "Version": "1.1-0",
       "Source": "Repository",
-      "Repository": "CRAN",
+      "Repository": "RSPM",
       "Hash": "f1cb46c157d080b729159d407be83496",
       "Requirements": []
     },
@@ -4149,7 +4552,7 @@
       "Package": "uwot",
       "Version": "0.1.16",
       "Source": "Repository",
-      "Repository": "CRAN",
+      "Repository": "RSPM",
       "Hash": "252deaa1c1d6d3da6946694243781ea3",
       "Requirements": [
         "FNN",
@@ -4165,7 +4568,7 @@
       "Package": "vctrs",
       "Version": "0.6.3",
       "Source": "Repository",
-      "Repository": "CRAN",
+      "Repository": "RSPM",
       "Hash": "d0ef2856b83dc33ea6e255caf6229ee2",
       "Requirements": [
         "cli",
@@ -4174,11 +4577,25 @@
         "rlang"
       ]
     },
+    "vegan": {
+      "Package": "vegan",
+      "Version": "2.7-2",
+      "Source": "Repository",
+      "Repository": "CRAN",
+      "Hash": "0087ee91f0844ce3ce4d0c0eaf85f8bf",
+      "Requirements": [
+        "MASS",
+        "cluster",
+        "lattice",
+        "mgcv",
+        "permute"
+      ]
+    },
     "vipor": {
       "Package": "vipor",
       "Version": "0.4.5",
       "Source": "Repository",
-      "Repository": "CRAN",
+      "Repository": "RSPM",
       "Hash": "ea85683da7f2bfa63a98dc6416892591",
       "Requirements": []
     },
@@ -4186,7 +4603,7 @@
       "Package": "viridis",
       "Version": "0.6.4",
       "Source": "Repository",
-      "Repository": "CRAN",
+      "Repository": "RSPM",
       "Hash": "80cd127bc8c9d3d9f0904ead9a9102f1",
       "Requirements": [
         "ggplot2",
@@ -4199,6 +4616,11 @@
       "Version": "0.4.2",
       "Source": "Repository",
       "Repository": "CRAN",
+      "RemoteType": "standard",
+      "RemotePkgRef": "viridisLite",
+      "RemoteRef": "viridisLite",
+      "RemoteRepos": "https://cloud.r-project.org",
+      "RemoteSha": "0.4.2",
       "Hash": "c826c7c4241b6fc89ff55aaea3fa7491",
       "Requirements": []
     },
@@ -4206,7 +4628,7 @@
       "Package": "vroom",
       "Version": "1.6.3",
       "Source": "Repository",
-      "Repository": "CRAN",
+      "Repository": "RSPM",
       "Hash": "8318e64ffb3a70e652494017ec455561",
       "Requirements": [
         "bit64",
@@ -4229,7 +4651,7 @@
       "Package": "waldo",
       "Version": "0.5.1",
       "Source": "Repository",
-      "Repository": "CRAN",
+      "Repository": "RSPM",
       "Hash": "2c993415154cdb94649d99ae138ff5e5",
       "Requirements": [
         "cli",
@@ -4241,19 +4663,45 @@
         "tibble"
       ]
     },
+    "webutils": {
+      "Package": "webutils",
+      "Version": "1.2.2",
+      "Source": "Repository",
+      "Repository": "CRAN",
+      "Hash": "2dbcd7c8fcbe044cf76dac3c6a0a41c6",
+      "Requirements": [
+        "curl",
+        "jsonlite"
+      ]
+    },
     "withr": {
       "Package": "withr",
       "Version": "2.5.0",
       "Source": "Repository",
-      "Repository": "CRAN",
+      "Repository": "RSPM",
       "Hash": "c0e49a9760983e81e55cdd9be92e7182",
       "Requirements": []
+    },
+    "wordspace": {
+      "Package": "wordspace",
+      "Version": "0.2-9",
+      "Source": "Repository",
+      "Repository": "CRAN",
+      "Hash": "bedf60a7f6d54ffe43c5ce0b3d05e053",
+      "Requirements": [
+        "MASS",
+        "Matrix",
+        "Rcpp",
+        "cluster",
+        "iotools",
+        "sparsesvd"
+      ]
     },
     "xfun": {
       "Package": "xfun",
       "Version": "0.39",
       "Source": "Repository",
-      "Repository": "CRAN",
+      "Repository": "RSPM",
       "Hash": "8f56e9acb54fb525e66464d57ab58bcb",
       "Requirements": []
     },
@@ -4261,7 +4709,7 @@
       "Package": "xml2",
       "Version": "1.3.5",
       "Source": "Repository",
-      "Repository": "CRAN",
+      "Repository": "RSPM",
       "Hash": "6c40e5cfcc6aefd88110666e18c31f40",
       "Requirements": []
     },
@@ -4285,7 +4733,7 @@
       "Package": "yulab.utils",
       "Version": "0.0.6",
       "Source": "Repository",
-      "Repository": "CRAN",
+      "Repository": "RSPM",
       "Hash": "0d0b7cc6da5efc21f07f6b8d966a9cc1",
       "Requirements": []
     },

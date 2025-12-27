@@ -4,7 +4,6 @@ execute:
   freeze: auto 
   warning: false
   message: false
-  
 ---
 
 ```{r}
@@ -82,7 +81,7 @@ norm_counts <- counts(deseq_list$`Mac/mono`, normalized = TRUE) %>%
 saveRDS(norm_counts, file.path(results_dir, "pb_iso_macs_norm_counts.rds"))
 ```
 
-```{r}
+```{r, eval = FALSE}
 results(deseq_list$`Mac/mono`) %>% 
   as_tibble(rownames = "gene") %>% 
   filter(log2FoldChange > 0) %>% 
@@ -91,7 +90,7 @@ results(deseq_list$`Mac/mono`) %>%
   datatable()
 ```
 
-```{r}
+```{r, eval = F}
 results(deseq_list$`Mac/mono`) %>% 
   as_tibble(rownames = "gene") %>% 
   filter(log2FoldChange < 0) %>% 
@@ -104,6 +103,42 @@ results(deseq_list$`Mac/mono`) %>%
 pb_dge_df <- results(deseq_list$`Mac/mono`) %>% 
   as_tibble(rownames = "gene") 
 write_tsv(pb_dge_df, file.path(results_dir, "dge_pb_iso_macs_b2m.v.wt.tsv"))
+```
+
+#### Heatmap visualization
+
+```{r}
+dge_b2m.v.WT <- pb_dge_df
+
+topn <- 100
+top_n_genes <- dge_b2m.v.WT %>% 
+  filter(log2FoldChange > 0) %>% 
+  arrange(padj) %>% 
+  head(topn) %>% 
+  .$gene
+bot_n_genes <- dge_b2m.v.WT %>% 
+  filter(log2FoldChange < 0) %>% 
+  arrange(padj) %>% 
+  head(topn) %>% 
+  .$gene
+```
+
+Looking at the top 100 genes, either way
+
+```{r, fig.width = 3, fig.height = 5}
+h_mtx <- norm_counts %>% 
+  filter(gene %in% top_n_genes | gene %in% bot_n_genes) %>% 
+  mutate(gene = factor(gene, levels = c(top_n_genes, rev(bot_n_genes)))) %>% 
+  arrange(gene) %>% 
+  column_to_rownames("gene") %>% 
+  as.matrix() %>% 
+  t() %>% 
+  scale() %>% 
+  t()
+Heatmap(h_mtx, 
+        cluster_rows = FALSE, 
+        name = "scaled expr.",
+        show_row_names = FALSE)
 ```
 
 ### Single cell
@@ -119,14 +154,14 @@ dge_b2m.v.WT <- readRDS(
     as_tibble(rownames = "gene")
 ```
 
-```{r}
+```{r, eval = FALSE}
 datatable(dge_b2m.v.WT %>%
             filter(avg_log2FC > 0) %>%
             arrange(p_val_adj) %>%
             filter(str_detect(gene, "Rpl|Rps", negate = TRUE)))
 ```
 
-```{r}
+```{r, eval = FALSE}
 datatable(dge_b2m.v.WT %>%
             filter(avg_log2FC < 0) %>%
             arrange(p_val_adj) %>%
@@ -196,7 +231,7 @@ p +
   theme(aspect.ratio = 1)
 ```
 
-```{r}
+```{r, eval = FALSE}
 ggplotly(p +
            geom_point(aes(label = gene),
                       data = ~ ..1 %>% arrange(padj) %>% head(50), 
@@ -205,6 +240,7 @@ ggplotly(p +
                       data = ~ ..1 %>% arrange(p_val_adj) %>% head(50), 
                       color = "blue"))
 ```
+
 
 ## ssGSEA
 

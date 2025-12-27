@@ -1,0 +1,21 @@
+{
+  "hash": "7bc36c32fbe71f47ccf917bd09fa02d4",
+  "result": {
+    "engine": "knitr",
+    "markdown": "---\ntitle: \"Comparing CD40 and isotype within B2m KO\"\nexecute: \n  freeze: auto \n  warning: false\n  message: false\n---\n\n\n::: {.cell}\n\n:::\n\n\n## Myeloid subsets\n\n\n::: {.cell}\n\n:::\n\n\n### Pseudobulk\n\n\n::: {.cell}\n\n:::\n\n\n\n::: {.cell}\n::: {.cell-output-display}\n![](13_pb-and-sc_comparing_CD40_and_isotype_files/figure-pdf/unnamed-chunk-4-1.pdf)\n:::\n:::\n\n\n\n::: {.cell}\n\n:::\n\n\n\n::: {.cell}\n\n:::\n\n\n\n::: {.cell}\n\n:::\n\n\n\n::: {.cell}\n\n:::\n\n\n\n::: {.cell}\n\n:::\n\n\n\n::: {.cell}\n::: {.cell-output .cell-output-stdout}\n\n```\n# A tibble: 10 x 7\n   gene     baseMean log2FoldChange lfcSE  stat   pvalue     padj\n   <chr>       <dbl>          <dbl> <dbl> <dbl>    <dbl>    <dbl>\n 1 Rnase2a     67.6            5.64 0.636  8.87 7.37e-19 8.11e-17\n 2 Cd209a     161.             5.51 0.408 13.5  1.47e-41 2.59e-38\n 3 Klk1         7.76           4.73 1.20   3.95 7.89e- 5 3.85e- 4\n 4 Plet1       40.0            4.43 0.881  5.03 4.94e- 7 4.51e- 6\n 5 Siglech     20.4            3.57 0.638  5.59 2.28e- 8 2.92e- 7\n 6 Slco2b1    157.             3.54 0.568  6.23 4.78e-10 9.33e- 9\n 7 Slc22a23    21.4            3.39 0.522  6.49 8.63e-11 2.02e- 9\n 8 Sept3       23.0            3.36 0.637  5.27 1.34e- 7 1.43e- 6\n 9 Ccl24     1629.             3.34 0.677  4.93 8.15e- 7 7.02e- 6\n10 Wnt11       18.4            3.24 0.717  4.52 6.13e- 6 4.14e- 5\n```\n\n\n:::\n:::\n\n\n#### Heatmap visualization of mac/mono only\n\n\n::: {.cell}\n\n:::\n\n\n\n::: {.cell}\n::: {.cell-output-display}\n![](13_pb-and-sc_comparing_CD40_and_isotype_files/figure-pdf/unnamed-chunk-12-1.pdf)\n:::\n:::\n\n\n## all myeloid\n\n### Pseudobulk\n\n\n::: {.cell}\n\n:::\n\n\n\n::: {.cell}\n\n:::\n\n\n#### Heatmap visualization\n\n\n::: {.cell}\n\n:::\n\n\n\n::: {.cell}\n::: {.cell-output-display}\n![](13_pb-and-sc_comparing_CD40_and_isotype_files/figure-pdf/unnamed-chunk-16-1.pdf)\n:::\n:::\n\n\n## lymphocyte subset\n\n\n::: {.cell}\n\n:::\n\n\n### Pseudobulk\n\n\n::: {.cell}\n\n:::\n\n\n\n::: {.cell}\n\n:::\n\n\n#### Heatmap visualization\n\n\n::: {.cell}\n\n:::\n\n\n\n::: {.cell}\n::: {.cell-output-display}\n![](13_pb-and-sc_comparing_CD40_and_isotype_files/figure-pdf/unnamed-chunk-21-1.pdf)\n:::\n:::\n\n\n## All\n\n\n::: {.cell}\n\n:::\n\n\n### Pseudobulk\n\n\n::: {.cell}\n\n:::\n\n\n\n::: {.cell}\n::: {.cell-output-display}\n![](13_pb-and-sc_comparing_CD40_and_isotype_files/figure-pdf/unnamed-chunk-24-1.pdf)\n:::\n:::\n\n\n\n::: {.cell}\n\n:::\n\n\n\n::: {.cell}\n\n:::\n\n\n\n::: {.cell}\n\n:::\n\n\n\n::: {.cell}\n\n:::\n\n\n\n::: {.cell}\n::: {.cell-output .cell-output-stdout}\n\n```\n# A tibble: 10 x 7\n   gene    baseMean log2FoldChange lfcSE  stat   pvalue     padj\n   <chr>      <dbl>          <dbl> <dbl> <dbl>    <dbl>    <dbl>\n 1 Sct        10.9            6.12 1.34   4.55 5.33e- 6 3.40e- 5\n 2 Msx3       10.3            6.07 1.21   5.01 5.47e- 7 4.67e- 6\n 3 Rnase2a    69.0            5.76 0.589  9.77 1.50e-22 2.69e-20\n 4 Scn3a      12.0            5.69 1.04   5.47 4.40e- 8 4.98e- 7\n 5 Cd209e     90.4            5.00 0.840  5.95 2.65e- 9 4.03e- 8\n 6 Myh13       4.72           4.94 1.28   3.86 1.15e- 4 4.98e- 4\n 7 Gpr4       30.1            4.80 0.650  7.39 1.49e-13 5.73e-12\n 8 Plet1     346.             4.70 0.917  5.12 3.01e- 7 2.76e- 6\n 9 Cd209a    901.             4.67 0.643  7.26 3.87e-13 1.35e-11\n10 Klk1      143.             4.54 0.282 16.1  1.54e-58 3.53e-55\n```\n\n\n:::\n:::\n\n\n",
+    "supporting": [
+      "13_pb-and-sc_comparing_CD40_and_isotype_files\\figure-pdf"
+    ],
+    "filters": [
+      "rmarkdown/pagebreak.lua"
+    ],
+    "includes": {},
+    "engineDependencies": {
+      "knitr": [
+        "{\"type\":\"list\",\"attributes\":{},\"value\":[]}"
+      ]
+    },
+    "preserve": null,
+    "postProcess": false
+  }
+}
