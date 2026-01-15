@@ -20,7 +20,7 @@ library(plotly)
 TEXT_SIZE <- 12
 ```
 
-## Myeloid subsets
+## Myeloid subset
 
 ```{r}
 so_M <- readRDS(file.path(results_dir, "so_filterRNA200mito10_subsetMremovedoublets.rds"))
@@ -174,6 +174,18 @@ write_tsv(pb_M_dge_df, file.path(results_dir, "dge_pb_b2m_all-myeloid_cd40.v.iso
 
 #### Heatmap visualization
 
+by pvalue
+
+```{r}
+dge_cd40.v.iso %>% 
+  filter(log2FoldChange < 0) %>% 
+  arrange(padj) %>% 
+  mutate(rank = row_number()) %>% 
+  filter(gene == "Ly6i")
+  
+```
+
+
 ```{r}
 dge_cd40.v.iso <- pb_M_dge_df
 
@@ -200,7 +212,201 @@ h_mtx <- norm_counts %>%
   t() %>% 
   scale() %>% 
   t()
+
+labels <- c(
+  "Nos2",
+"Cxcl16",
+"Aif1",
+"Ifi30",
+"Ly6i",
+"Ncf4",
+"Iigp1",
+"B2m",
+"Acod1",
+"H2-Q7",
+"Siglech",
+"Flt3",
+"Itgae",
+"Tcf4",
+"Ccr9"
+)
+at <- which(rownames(h_mtx) %in% labels)
+filtered_labels <- rownames(h_mtx)[rownames(h_mtx) %in% labels]
+ha <- rowAnnotation(foo = anno_mark(at = at, labels = filtered_labels))
+
 Heatmap(h_mtx, 
+        right_annotation = ha,
+        cluster_rows = FALSE, 
+        name = "scaled expr.",
+        show_row_names = FALSE)
+```
+
+
+
+by fold change
+
+```{r}
+dge_cd40.v.iso <- pb_M_dge_df
+
+topn <- 100
+top_n_genes <- dge_cd40.v.iso %>% 
+  arrange(desc(log2FoldChange)) %>% 
+  head(topn) %>% 
+  .$gene
+bot_n_genes <- dge_cd40.v.iso %>% 
+  arrange(log2FoldChange) %>% 
+  head(topn) %>% 
+  .$gene
+```
+
+```{r, fig.width = 3, fig.height = 5}
+h_mtx <- norm_counts %>% 
+  filter(gene %in% top_n_genes | gene %in% bot_n_genes) %>% 
+  mutate(gene = factor(gene, levels = c(top_n_genes, rev(bot_n_genes)))) %>% 
+  arrange(gene) %>% 
+  column_to_rownames("gene") %>% 
+  as.matrix() %>% 
+  t() %>% 
+  scale() %>% 
+  t()
+
+labels <- c("Nos2", "S100a8", "S100a9", "Cxcl9", "Cxcl13", 
+            "CD209a",
+"Siglech",
+"Itgae",
+"Xcr1"
+)
+at <- which(rownames(h_mtx) %in% labels)
+filtered_labels <- rownames(h_mtx)[rownames(h_mtx) %in% labels]
+ha <- rowAnnotation(foo = anno_mark(at = at, labels = filtered_labels))
+
+Heatmap(h_mtx, 
+        right_annotation = ha,
+        cluster_rows = FALSE, 
+        name = "scaled expr.",
+        show_row_names = FALSE)
+```
+## all monocyte
+
+Brian specifies cluster 0, 1, 5, 7, 13, 14
+
+### Pseudobulk
+
+```{r}
+monocyte_clusters <- c("0: MDSC", 
+                       "1: Ccr2+ monocyte", 
+                       "5: CD40-specific monocyte", 
+                       "7: inflammatory monocyte", 
+                       "13: Cx3cr1+ monocyte", 
+                       "14: Ctsk+ monocyte")
+Idents(so_b2m_M) <- "clusters_M"
+so_b2m_monocyte <- subset(so_b2m_M, idents = monocyte_clusters)
+```
+
+```{r}
+pb_M <- make_pseudobulk(so_b2m_monocyte,
+                       split_var = NULL,
+                       sample_var = "mouse_no_underscore",
+                       vars = "treatment")
+deseq_M <- pb_to_deseq(pb_M, sample_var = "mouse_no_underscore", vars = "treatment")
+rlog_M <- rlog(deseq_M, blind = TRUE)
+norm_counts_M <- counts(deseq_M, normalized = TRUE) %>%
+  as_tibble(rownames = "gene")
+write_tsv(norm_counts_M, file.path(results_dir, "pb-b2m-only_all-monocytes_normalized_counts.tsv"))
+pb_M_dge_df <- results(deseq_M, name = "treatment_Isotype_vs_CD40.agonist") %>% 
+  as_tibble(rownames = "gene") 
+write_tsv(pb_M_dge_df, file.path(results_dir, "dge_pb_b2m_all-monocyte_cd40.v.iso.tsv"))
+```
+
+#### Heatmap visualization
+
+by pvalue
+
+```{r}
+dge_cd40.v.iso <- pb_M_dge_df
+
+topn <- 100
+top_n_genes <- dge_cd40.v.iso %>% 
+  filter(log2FoldChange > 0) %>% 
+  arrange(padj) %>% 
+  head(topn) %>% 
+  .$gene
+bot_n_genes <- dge_cd40.v.iso %>% 
+  filter(log2FoldChange < 0) %>% 
+  arrange(padj) %>% 
+  head(topn) %>% 
+  .$gene
+```
+
+```{r, fig.width = 3, fig.height = 5}
+h_mtx <- norm_counts %>% 
+  filter(gene %in% top_n_genes | gene %in% bot_n_genes) %>% 
+  mutate(gene = factor(gene, levels = c(top_n_genes, rev(bot_n_genes)))) %>% 
+  arrange(gene) %>% 
+  column_to_rownames("gene") %>% 
+  as.matrix() %>% 
+  t() %>% 
+  scale() %>% 
+  t()
+
+labels <- c("Nos2", "S100a8", "S100a9", "Cxcl9", 
+            "CD209a",
+"Siglech",
+"Itgae",
+"Xcr1"
+)
+at <- which(rownames(h_mtx) %in% labels)
+filtered_labels <- rownames(h_mtx)[rownames(h_mtx) %in% labels]
+ha <- rowAnnotation(foo = anno_mark(at = at, labels = filtered_labels))
+
+Heatmap(h_mtx, 
+        right_annotation = ha,
+        cluster_rows = FALSE, 
+        name = "scaled expr.",
+        show_row_names = FALSE)
+```
+
+
+
+by fold change
+
+```{r}
+dge_cd40.v.iso <- pb_M_dge_df
+
+topn <- 100
+top_n_genes <- dge_cd40.v.iso %>% 
+  arrange(desc(log2FoldChange)) %>% 
+  head(topn) %>% 
+  .$gene
+bot_n_genes <- dge_cd40.v.iso %>% 
+  arrange(log2FoldChange) %>% 
+  head(topn) %>% 
+  .$gene
+```
+
+```{r, fig.width = 3, fig.height = 5}
+h_mtx <- norm_counts %>% 
+  filter(gene %in% top_n_genes | gene %in% bot_n_genes) %>% 
+  mutate(gene = factor(gene, levels = c(top_n_genes, rev(bot_n_genes)))) %>% 
+  arrange(gene) %>% 
+  column_to_rownames("gene") %>% 
+  as.matrix() %>% 
+  t() %>% 
+  scale() %>% 
+  t()
+
+labels <- c("Nos2", "S100a8", "S100a9", "Cxcl9", "Cxcl13", 
+            "CD209a",
+"Siglech",
+"Itgae",
+"Xcr1"
+)
+at <- which(rownames(h_mtx) %in% labels)
+filtered_labels <- rownames(h_mtx)[rownames(h_mtx) %in% labels]
+ha <- rowAnnotation(foo = anno_mark(at = at, labels = filtered_labels))
+
+Heatmap(h_mtx, 
+        right_annotation = ha,
         cluster_rows = FALSE, 
         name = "scaled expr.",
         show_row_names = FALSE)
@@ -240,6 +446,17 @@ write_tsv(pb_T_dge_df, file.path(results_dir, "dge_pb_b2m_all-lymphocyte_cd40.v.
 
 #### Heatmap visualization
 
+By p-value
+
+```{r}
+pb_T_dge_df %>% 
+  filter(log2FoldChange > 0) %>% 
+  arrange(padj) %>% 
+  mutate(rank = row_number()) %>% 
+  filter(gene == "Ikzf4")
+```
+
+
 ```{r}
 dge_cd40.v.iso <- pb_T_dge_df
 
@@ -257,6 +474,56 @@ bot_n_genes <- dge_cd40.v.iso %>%
 ```
 
 ```{r, fig.width = 3, fig.height = 5}
+h_mtx <- norm_counts_T %>% 
+  filter(gene %in% top_n_genes | gene %in% bot_n_genes) %>% 
+  mutate(gene = factor(gene, levels = c(top_n_genes, rev(bot_n_genes)))) %>% 
+  arrange(gene) %>% 
+  column_to_rownames("gene") %>% 
+  as.matrix() %>% 
+  t() %>% 
+  scale() %>% 
+  t()
+
+labels <- c(
+"Cd8b1",
+"Nkg7",
+"Gzmk",
+"Ifng",
+"Plac8",
+"Ikzf2",
+"Sell",
+"Bach2",
+"Ikzf4",
+"Cxcr4"
+)
+at <- which(rownames(h_mtx) %in% labels)
+filtered_labels <- rownames(h_mtx)[rownames(h_mtx) %in% labels]
+ha <- rowAnnotation(foo = anno_mark(at = at, labels = filtered_labels))
+
+Heatmap(h_mtx, 
+        right_annotation = ha,
+        cluster_rows = FALSE, 
+        name = "scaled expr.",
+        show_row_names = FALSE)
+```
+
+By FC
+
+```{r}
+dge_cd40.v.iso <- pb_T_dge_df
+
+topn <- 100
+top_n_genes <- dge_cd40.v.iso %>% 
+  arrange(desc(log2FoldChange)) %>% 
+  head(topn) %>% 
+  .$gene
+bot_n_genes <- dge_cd40.v.iso %>% 
+  arrange(log2FoldChange) %>% 
+  head(topn) %>% 
+  .$gene
+```
+
+```{r, fig.width = 3, fig.height = 5}
 h_mtx <- norm_counts %>% 
   filter(gene %in% top_n_genes | gene %in% bot_n_genes) %>% 
   mutate(gene = factor(gene, levels = c(top_n_genes, rev(bot_n_genes)))) %>% 
@@ -266,7 +533,31 @@ h_mtx <- norm_counts %>%
   t() %>% 
   scale() %>% 
   t()
+
+labels <- c("Ifitm1",
+"Il21",
+"Gzmk",
+"Ccl5",
+"Cd8b1",
+"Cxcr3",
+"Cxcl10",
+"Ifng",
+"Isg15",
+"Nkg7", 
+"Itgb8",
+"Ikzf4",
+"Sell",
+"Ikzf2",
+"Ccr7",
+"Foxp3",
+"Ccl1"
+)
+at <- which(rownames(h_mtx) %in% labels)
+filtered_labels <- rownames(h_mtx)[rownames(h_mtx) %in% labels]
+ha <- rowAnnotation(foo = anno_mark(at = at, labels = filtered_labels))
+
 Heatmap(h_mtx, 
+        right_annotation = ha,
         cluster_rows = FALSE, 
         name = "scaled expr.",
         show_row_names = FALSE)
