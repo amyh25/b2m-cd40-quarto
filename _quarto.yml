@@ -33,7 +33,7 @@ book:
       - book/14_inflammatory_monocyte_signature.qmd
       - book/15_prelim_tcga_analysis.qmd
       - book/16_full_tcga_analysis.qmd
-      - book/17_other_clinical_signatures.qmd
+      # - book/17_other_clinical_signatures.qmd
     - part: "Miscellaneous"
       chapters:
       - book/export-proportions.qmd

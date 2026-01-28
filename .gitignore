@@ -307,3 +307,5 @@ tags
 
 
 /.quarto/
+
+**/*.quarto_ipynb

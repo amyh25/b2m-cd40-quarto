@@ -40,7 +40,7 @@ gs_list_mouse <- readRDS(file.path(results_dir, "myeloid_scRNA_signatures_20.200
 We'll also need to be converting back and forth from mouse and human genes. We'll use this dataframe that I generated from biomaRt previously to do so. 
 
 ```{r}
-mouse_human_genes <- readRDS(here("data", "mouse_human_genes.rds"))
+mouse_human_genes <- readRDS(here("data", "signatures", "mouse_human_genes.rds"))
 human_mouse_key <- set_names(mouse_human_genes$MGI.symbol, mouse_human_genes$HGNC.symbol)
 mouse_human_key <- set_names(mouse_human_genes$HGNC.symbol, mouse_human_genes$MGI.symbol)
 ```

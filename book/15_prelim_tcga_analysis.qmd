@@ -45,7 +45,7 @@ tcga_mtx <- tcga_data_mrna_seq_v2_rsem_wide %>%
 We'll need to convert the human gene names into mouse gene names to match with the signatures. 
 
 ```{r}
-mouse_human_genes <- readRDS(here("data",  "mouse_human_genes.rds"))
+mouse_human_genes <- readRDS(here("data", "signatures", "mouse_human_genes.rds"))
 human_mouse_key <- set_names(mouse_human_genes$MGI.symbol, mouse_human_genes$HGNC.symbol)
 
 new_genes <- human_mouse_key[rownames(tcga_mtx)]

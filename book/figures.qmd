@@ -28,10 +28,6 @@ theme_set(
         legend.background = element_blank(),
         legend.margin = margin()
 ))
-
-palette_cluster_M[["0: MDSC"]] <- social_palette[3]
-palette_cluster_M[["1: Ccr2+ monocyte"]] <- social_palette[5]
-palette_cluster_M[["7: inflammatory monocyte"]] <- rev(social_palette)[1]
 ```
 
 ```{r so}
@@ -966,32 +962,33 @@ ks.test(ifngr_ALL_list$Isotype, ifngr_ALL_list$`CD40 agonist`)
 
 ```{r, fig.width = 3, fig.asp = 1}
 p_umap_M <- metadata_M %>%
-    plot_umap(
-        color_str = "clusters_M",
-        pixels = c(2048, 2048),
-        pointsize = 3.1
-    ) +
-    geom_text_repel(
-        aes(label = clusters_M),
-        data = ~..1 %>% 
-            group_by(clusters_M) %>% 
-            summarise(UMAP_1 = mean(UMAP_1), 
-                      UMAP_2 = mean(UMAP_2)),
-        force = 5,
-        size = 2
-    ) + 
-    scale_y_continuous(expand = expansion(mult = 0.15)) +
-    annotate(
-        "text",
-        x = -Inf,
-        y = -Inf,
-        label = "Myeloid cells\nn=60,435",
-        size = 2,
-        hjust = -0.1,
-        vjust = -0.25
-    ) + 
-    scale_color_manual(values = palette_cluster_M) +
-    theme(legend.position = "none")
+  plot_umap(
+    x = umap_1,
+    y = umap_2,
+    color_str = "clusters_M",
+    pixels = c(2048, 2048),
+    pointsize = 3.1
+  ) +
+  geom_text_repel(
+    aes(label = clusters_M),
+    data = ~ ..1 %>%
+      group_by(clusters_M) %>%
+      summarise(umap_1 = mean(umap_1), umap_2 = mean(umap_2)),
+    force = 5,
+    size = 2
+  ) +
+  scale_y_continuous(expand = expansion(mult = 0.15)) +
+  annotate(
+    "text",
+    x = -Inf,
+    y = -Inf,
+    label = "Myeloid cells\nn=60,435",
+    size = 2,
+    hjust = -0.1,
+    vjust = -0.25
+  ) +
+  scale_color_manual(values = palette_cluster_M) +
+  theme(legend.position = "none")
 p_umap_M
 ```
 
@@ -1102,12 +1099,12 @@ get_metadata_from_so(so_M) %>%
     mutate(genotype = factor(genotype, levels = c("Ctrl", "B2m KO"))) %>% 
     mutate(treatment = factor(treatment, levels = c("Isotype", "CD40 agonist"))) %>% 
     ggplot() +
-    aes(UMAP_1, UMAP_2) +
+    aes(umap_1, umap_2) +
     stat_density_2d(aes(fill = ..density..),
                     geom = "raster",
                     contour = FALSE) +
     geom_text(aes(label = paste0(genotype, "\n", treatment), 
-                  x = min(metadata_all$UMAP_1), y = min(metadata_all$UMAP_2)),
+                  x = min(metadata_all$umap_1), y = min(metadata_all$umap_2)),
               hjust = 0, vjust = 0, 
               color = "white", 
               size = 2, 
@@ -1129,8 +1126,6 @@ get_metadata_from_so(so_M) %>%
         legend.title = element_blank(),
         legend.position = c(0.91,-0.25),
         legend.direction = "horizontal",
-        aspect.ratio = diff(range(metadata_all$UMAP_2)) /
-            diff(range(metadata_all$UMAP_1)), 
         axis.title.x = element_text(vjust = 1), 
         axis.title.y = element_text(vjust = 0)
     ) + 

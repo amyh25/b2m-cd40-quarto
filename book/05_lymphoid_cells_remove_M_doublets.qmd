@@ -190,31 +190,6 @@ get_metadata_from_so(so) %>%
     scale_fill_manual(values = palette_cluster) 
 ```
 
-```{r, fig.asp = 2, fig.width = 3}
-get_metadata_from_so(so) %>%
-  calculate_proportion(clusters_T, group) %>%
-  mutate(clusters_T = factor(clusters_T, levels = names(palette_cluster_T))) %>%
-  plot_proportion(fill = clusters_T) +
-  labs(y = "Frequency of Lymphoid") +
-  scale_fill_manual(
-    values = c(
-      "#FDA863",
-      "#ABDDA4",
-      "#9E0142",
-      "#86C2A5",
-      "#D53E4F",
-      "#92C5DE",
-      "#AAA0DB",
-      "#FEE08B",
-      "#4393C3",
-      "#006837",
-      "grey"
-    )
-  )
-```
-
-
-
 ```{r, fig.asp = 1, fig.width = 7}
 mouse_group_key_df <- get_metadata_from_so(so) %>% 
     dplyr::select(mouse, group) %>% 
@@ -292,6 +267,55 @@ get_metadata_from_so(so, metadata = c("group")) %>%
     make_galaxy_plot(sample_n = 2000, umap1 = "umap_1", umap2 = "umap_2") + 
     facet_wrap(~group, ncol = 4)
 ```
+
+
+
+```{r}
+get_metadata_from_so(so, metadata = "group") %>%
+  named_group_split(group) %>%
+  set_names(c(
+    "B2m KO, CD40 agonist",
+    "B2m KO, Isotype",
+    "WT, CD40 agonist",
+    "WT, Isotype"
+  )) %>%
+  imap(
+    ~ 
+    make_galaxy_plot(..1, sample_n = 0, umap1 = "umap_1", umap2 = "umap_2") + 
+      geom_scattermore(pixels = c(1024, 1024), color = "white") +
+      labs(title = ..2) +
+      remove_spines() +
+      theme(axis.text = element_blank())
+  ) %>%
+  plot_grid(plotlist = ., ncol = 2)
+
+
+p_list <- get_metadata_from_so(so, metadata = "group") %>%
+  named_group_split(group) %>%
+  set_names(c(
+    "B2m KO, CD40 agonist",
+    "B2m KO, Isotype",
+    "WT, CD40 agonist",
+    "WT, Isotype"
+  )) %>%
+  imap(
+    ~ make_galaxy_plot(..1, sample_n = 0, umap1 = "umap_1", umap2 = "umap_2") +
+      geom_scattermore(pixels = c(1024, 1024), color = "white") +
+      labs(title = ..2) +
+      remove_spines() +
+      theme(axis.text = element_blank() +
+              scale_fill_viridis(
+                limits = c(0, 0.07), option = "magma"
+              )))
+p <- p_list %>%
+  map(~ ..1+theme(legend.position = "none")) %>%
+  plot_grid(plotlist = ., ncol = 2)
+plot_grid(p,
+          get_legend(p_list[[1]]),
+          ncol = 2,
+          rel_widths = c(4, 1))
+```
+
 
 
 # Visualize specific markers
@@ -417,20 +441,8 @@ plot_df %>%
   mutate(clusters_T = factor(clusters_T, levels = names(palette_cluster_T))) %>% 
   arrange(clusters_T) %>% 
   plot_umap(color_str = "clusters_T", x = umap_1, y = umap_2, 
-            pixels = c(2048, 2048), pointsize = 4.5) +
-  scale_color_manual(values = c(
-    "#FDA863", 
-    "#ABDDA4", 
-    "#9E0142", 
-    "#86C2A5", 
-    "#D53E4F", 
-    "#92C5DE", 
-    "#AAA0DB", 
-    "#FEE08B", 
-    "#4393C3", 
-    "#006837", 
-    "grey"
-  ))
+            pixels = c(2048, 2048), pointsize = 4.5) + 
+  scale_color_manual(values = palette_cluster_T)
 ```
 
 

@@ -53,10 +53,7 @@ cluster_ann_list$Myeloid <- readxl::read_excel(file.path(results_dir, "cluster_a
   filter(Subset == "so_filterRNA200mito10_subsetMremovedoublets.rds") %>%
   filter(clustering == "RNA_snn_res.0.5") %>%
   mutate(cluster_ID_name = paste0(cluster, ": ", cluster_ID))
-palette_cluster_M <- social_palette %>% rev() %>%
-  .[1:length(cluster_ann_list$Myeloid$cluster_ID_name)] %>%
-  rev() %>%
-  set_names(cluster_ann_list$Myeloid$cluster_ID_name)
+palette_cluster_M <- cluster_ann_list$Myeloid$color %>% set_names(cluster_ann_list$Myeloid$cluster_ID_name)
 cluster_M_name_ordered <- cluster_ann_list$Myeloid %>%
   arrange(cluster_ID_grouped) %>%
   .$cluster_ID_name

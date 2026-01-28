@@ -49,11 +49,12 @@ clustree::clustree(so, prefix = "RNA_snn_res.")
 
 ```{r, fig.asp = 1, fig.width = 7}
 get_metadata_from_so(so) %>% 
-    dplyr::select(cell, UMAP_1, UMAP_2, all_of(str_subset(colnames(.), "RNA_snn_res."))) %>% 
+    dplyr::select(cell, umap_1, umap_2, all_of(str_subset(colnames(.), "RNA_snn_res."))) %>% 
     pivot_longer(cols = all_of(str_subset(colnames(.), "RNA_snn_res.")), 
                  names_to = "clustering", 
                  values_to = "cluster") %>% 
-    plot_umap(color_str = "cluster", label = TRUE, label_groups = "clustering") + 
+    plot_umap(x = umap_1, y = umap_2, 
+              color_str = "cluster", label = TRUE, label_groups = "clustering") + 
     facet_wrap(~clustering, ncol = 3)
 ```
 
@@ -102,22 +103,46 @@ so <- AddMetaData(so, metadata = cell_type_metadata)
 ```
 
 ```{r}
-cluster_ann_full_df <- readxl::read_excel(file.path(results_dir, "cluster_annotations.xlsx")) %>% 
-    tidyr::fill(Subset, clustering) %>% 
-    filter(Subset == "so_filterRNA200mito10.rds") %>% 
-    mutate(cluster_ID_name = paste0(cluster, ": ", cluster_ID))
+cluster_ann_full_df <- readxl::read_excel(file.path(results_dir, "cluster_annotations.xlsx")) %>%
+  tidyr::fill(Subset, clustering) %>%
+  filter(Subset == "so_filterRNA200mito10.rds") %>%
+  mutate(cluster_ID_name = paste0(cluster, ": ", cluster_ID))
 get_metadata_from_so(so, metadata = "clusters") %>%
-    plot_umap(color_str = "clusters", label = TRUE, pointsize = 0.2) +
-    theme(legend.position = "none") + 
-    scale_color_manual(values = set_names(cluster_ann_full_df$color,
-                                          paste0(cluster_ann_full_df$cluster, ": ",
-    cluster_ann_full_df$cluster_ID)))
-get_metadata_from_so(so, metadata = "clusters_M") %>% 
-    plot_umap(color_str = "clusters_M", label = TRUE, pointsize = 0.2, 
-              repel_min_segment_length = 0.1) + 
-    theme(legend.position = "none") + 
-    scale_color_manual(values = palette_cluster_M)
+  plot_umap(
+    x = umap_1,
+    y = umap_2,
+    color_str = "clusters",
+    label = TRUE,
+    pointsize = 1
+  ) +
+  theme(legend.position = "none") +
+  scale_color_manual(values = set_names(
+    cluster_ann_full_df$color,
+    paste0(
+      cluster_ann_full_df$cluster,
+      ": ",
+      cluster_ann_full_df$cluster_ID
+    )
+  ))
+
+
 ```
+
+```{r}
+
+get_metadata_from_so(so, metadata = "clusters_M") %>%
+  plot_umap(
+  x = umap_1,
+  y = umap_2,
+  color_str = "clusters_M",
+  label = TRUE,
+  pointsize = 1,
+  repel_min_segment_length = 0.1
+) +
+  theme(legend.position = "none") +
+  scale_color_manual(values = palette_cluster_M)
+```
+
 
 ```{r}
 get_metadata_from_so(so, metadata = "group") %>%
@@ -129,7 +154,7 @@ get_metadata_from_so(so, metadata = "group") %>%
     "WT, Isotype"
   )) %>%
   imap(
-    ~ make_galaxy_plot(..1, sample_n = 0) +
+    ~ make_galaxy_plot(..1, umap1 = "umap_1", umap2 = "umap_2", sample_n = 0) +
       geom_scattermore(pixels = c(1024, 1024), color = "white") +
       labs(title = ..2) +
       remove_spines() +
@@ -147,7 +172,7 @@ p_list <- get_metadata_from_so(so, metadata = "group") %>%
     "WT, Isotype"
   )) %>%
   imap(
-    ~ make_galaxy_plot(..1, sample_n = 0) +
+    ~ make_galaxy_plot(..1, umap1 = "umap_1", umap2 = "umap_2", sample_n = 0) +
       geom_scattermore(pixels = c(1024, 1024), color = "white") +
       labs(title = ..2) +
       remove_spines() +
@@ -227,20 +252,20 @@ get_metadata_from_so(so) %>%
     mutate(clusters = factor(clusters_M, levels = cluster_ID_name_ordered)) %>% 
     plot_proportion() + 
     labs(y = "Frequency of Myeloid") + 
-    scale_fill_manual(values = palette_cluster) 
+    scale_fill_manual(values = palette_cluster_M) 
 ```
 
 
 ```{r, fig.asp = 1.6, fig.width = 4}
-m_prop_df <- get_metadata_from_so(so) %>% 
-    filter(general_M_subtypes == "Macrophages") %>% 
-    calculate_proportion(clusters_M, group) %>% 
-    mutate(clusters = factor(clusters_M, levels = cluster_ID_name_ordered)) 
-m_prop_df %>% 
-    plot_proportion() + 
-    labs(y = "Frequency of Macrophages") + 
-    scale_fill_manual(values = palette_cluster[unique(m_prop_df$clusters_M)]) + 
-    theme(legend.position = "right")
+m_prop_df <- get_metadata_from_so(so) %>%
+  filter(general_M_subtypes == "Macrophages") %>%
+  calculate_proportion(clusters_M, group) %>%
+  mutate(clusters = factor(clusters_M, levels = cluster_ID_name_ordered))
+m_prop_df %>%
+  plot_proportion() +
+  labs(y = "Frequency of Macrophages") +
+  scale_fill_manual(values = palette_cluster_M) +
+  theme(legend.position = "right")
 ```
 
 ## Box plots with stats
@@ -325,15 +350,15 @@ prop_macs_df %>%
 
 
 ```{r, fig.asp = 1.6, fig.width = 4 }
-dc_prop_df <- get_metadata_from_so(so) %>% 
-    filter(general_M_subtypes == "DCs") %>% 
-    calculate_proportion(clusters_M, group) %>% 
-    mutate(clusters = factor(clusters_M, levels = cluster_ID_name_ordered)) 
-dc_prop_df %>% 
-    plot_proportion() + 
-    labs(y = "Frequency of DC") + 
-    scale_fill_manual(values = palette_cluster[unique(dc_prop_df$clusters_M)]) + 
-    theme(legend.position = "right")
+dc_prop_df <- get_metadata_from_so(so) %>%
+  filter(general_M_subtypes == "DCs") %>%
+  calculate_proportion(clusters_M, group) %>%
+  mutate(clusters = factor(clusters_M, levels = cluster_ID_name_ordered))
+dc_prop_df %>%
+  plot_proportion() +
+  labs(y = "Frequency of DC") +
+  scale_fill_manual(values = palette_cluster_M) +
+  theme(legend.position = "right")
 ```
 
 ```{r}
@@ -375,11 +400,11 @@ genes <- c("Ifngr1")
 ifng_df <- get_metadata_from_so(so, genes = genes) 
 ifng_df %>% 
     pivot_longer(cols = all_of(genes)) %>% 
-    plot_umap(pointsize = 1.1) + 
+    plot_umap(x = umap_1, y = umap_2, pointsize = 1.1) + 
     facet_wrap(~name) 
 ifng_df %>% 
     plot_violin(group = clusters_M, var = Ifngr1) + 
-    scale_fill_manual(values = palette_cluster)
+    scale_fill_manual(values = palette_cluster_M)
 ```
 
 # Visualize specific markers
@@ -388,7 +413,7 @@ ifng_df %>%
 genes <- c("Adgre1")
 get_metadata_from_so(so, genes = genes) %>% 
     pivot_longer(cols = all_of(genes)) %>% 
-    plot_umap(pointsize = 1.1) + 
+    plot_umap(x = umap_1, y = umap_2, pointsize = 1.1) + 
     facet_wrap(~name)
 ```
 
@@ -397,7 +422,7 @@ get_metadata_from_so(so, genes = genes) %>%
 genes <- c("Cd8a", "Cd3e", "Cd3d", "Lyz2", "Nkg7", "Trbc2")
 get_metadata_from_so(so, genes = genes) %>% 
     pivot_longer(cols = all_of(genes)) %>% 
-    plot_umap(pointsize = 1.1) + 
+    plot_umap(x = umap_1, y = umap_2, pointsize = 1.1) + 
     facet_wrap(~name)
 ```
 
@@ -405,7 +430,7 @@ get_metadata_from_so(so, genes = genes) %>%
 genes <- c("C1qa", "Cd209a", "Ccr7", "Wfdc17", "Ccl12", "Mmp12")
 get_metadata_from_so(so, genes = genes) %>% 
     pivot_longer(cols = all_of(genes)) %>% 
-    plot_umap(pointsize = 1.1) + 
+    plot_umap(x = umap_1, y = umap_2, pointsize = 1.1) + 
     facet_wrap(~name)
 ```
 
@@ -413,7 +438,7 @@ get_metadata_from_so(so, genes = genes) %>%
 genes <- c("Ly6c2", "Cxcl9", "Cxcl10", "Fcgr4", "Ms4a7")
 get_metadata_from_so(so, genes = genes) %>% 
     pivot_longer(cols = all_of(genes)) %>% 
-    plot_umap(pointsize = 1.1) + 
+    plot_umap(x = umap_1, y = umap_2, pointsize = 1.1) + 
     facet_wrap(~name)
 ```
 
@@ -427,9 +452,11 @@ if (!dir.exists(m_dir)) dir.create(m_dir)
 ## B2m KO vs WT in Isotype, Macs
 
 ```{r}
-so %>% 
-    get_metadata_from_so() %>% 
-    plot_umap(color_str = "clusters_M")
+so %>%
+  get_metadata_from_so() %>%
+  mutate(clusters_M = factor(clusters_M, levels = names(palette_cluster_M))) %>% 
+  plot_umap(x = umap_1, y = umap_2, color_str = "clusters_M") +
+  scale_color_manual(values = palette_cluster_M)
 ```
 
 ```{r}
@@ -441,21 +468,19 @@ so_macs <-
     )
 so_macs %>% 
     get_metadata_from_so() %>% 
-    plot_umap(color_str = "clusters_M")
+    plot_umap(x = umap_1, y = umap_2, color_str = "clusters_M") +
+  scale_color_manual(values = palette_cluster_M)
 ```
 
 ```{r}
 so_isotype_macs <- subset(so_macs %>% set_idents("treatment"), idents = "Isotype")
 so_isotype_macs %>% 
     get_metadata_from_so() %>% 
-    plot_umap(color_str = "treatment")
+    plot_umap(x = umap_1, y = umap_2, color_str = "treatment")
 so_isotype_macs %>% 
     get_metadata_from_so() %>% 
-    plot_umap(color_str = "genotype", pointsize = 1.1)
+    plot_umap(x = umap_1, y = umap_2, color_str = "genotype", pointsize = 1.1)
 ```
-
-
-
 
 ```{r}
 markers_isotype_macs_b2m.vs.wt <- run_or_readRDS(file.path(
@@ -474,7 +499,7 @@ function() {
 ```{r}
 so_isotype_macs %>% 
     get_metadata_from_so(genes = "Mrc1") %>% 
-    plot_umap(color_str = "Mrc1", pointsize = 1.1)  +
+    plot_umap(x = umap_1, y = umap_2, color_str = "Mrc1", pointsize = 1.1)  +
     facet_grid(~genotype)
 ```
 
@@ -508,8 +533,6 @@ p_volcano <- markers_isotype_macs_b2m.vs.wt %>%
     geom_text(aes(label = gene), 
               data = ~..1 %>% filter(gene == "Mrc1"))
 p_volcano
-library(plotly)
-ggplotly(p_volcano)
 ```
 
 ### GSEA with ranked list
@@ -764,8 +787,8 @@ plot_grid(
 # END
 
 ```{r save}
-# so <- readRDS(file.path(results_dir, "so_filterRNA200mito10_subsetMremovedoublets.rds"))
 saveRDS(so, file.path(results_dir, "so_filterRNA200mito10_subsetMremovedoublets.rds"))
+# so <- readRDS(file.path(results_dir, "so_filterRNA200mito10_subsetMremovedoublets.rds"))
 ```
 
 ```{r}

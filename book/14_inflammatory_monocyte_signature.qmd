@@ -62,22 +62,6 @@ dge_ccr2.v.myeloid %>%
     write_tsv(file.path(results_dir, "dge_ccr2-monocytes.v.rest-myeloid.tsv"))
 ```
 
-```{r}
-dge_inflamm.v.myeloid %>% 
-    as_tibble(rownames = "gene") %>% 
-    arrange(desc(avg_log2FC)) %>% 
-    datatable()
-```
-
-
-```{r}
-dge_ccr2.v.myeloid %>% 
-    as_tibble(rownames = "gene") %>% 
-    arrange(desc(avg_log2FC)) %>% 
-    datatable()
-```
-
-
 Compare the genes in the inflammatory v rest myeloid differential gene expression versus the ccr2 v rest myeloid differential gene expression
 
 ```{r}
@@ -103,12 +87,6 @@ p +
         color = "blue"
     ) +
     coord_fixed()
-```
-
-An interactive plot. 
-
-```{r}
-ggplotly(p)
 ```
 
 ## Compare inflammatory and ctrl monocytes against all cells
@@ -157,22 +135,6 @@ dge_ccr2.v.all %>%
 
 ```
 
-
-```{r}
-dge_inflamm.v.all %>% 
-    as_tibble(rownames = "gene") %>% 
-    arrange(desc(avg_log2FC)) %>% 
-    datatable()
-```
-
-
-```{r}
-dge_ccr2.v.all %>% 
-    as_tibble(rownames = "gene") %>% 
-    arrange(desc(avg_log2FC)) %>% 
-    datatable()
-```
-
 Compare the genes in the inflammatory v ALL myeloid differential gene expression versus the ccr2 v ALL myeloid differential gene expression
 
 ```{r}
@@ -198,12 +160,6 @@ p +
         color = "blue"
     ) +
     coord_fixed()
-```
-
-An interactive plot. 
-
-```{r}
-ggplotly(p)
 ```
 
 ## Compare inflammatory monocytes to other myeloid clusters (v myeloid)
@@ -237,20 +193,6 @@ dge_m2.v.myeloid %>%
     write_tsv(file.path(results_dir, "dge_m2.v.rest-myeloid.tsv"))
 ```
 
-```{r}
-dge_MDSC.v.myeloid %>% 
-    as_tibble(rownames = "gene") %>% 
-    arrange(desc(avg_log2FC)) %>% 
-    datatable()
-```
-
-```{r}
-dge_m2.v.myeloid %>% 
-    as_tibble(rownames = "gene") %>% 
-    arrange(desc(avg_log2FC)) %>% 
-    datatable()
-```
-
 Compare the genes in the inflammatory v rest myeloid differential gene expression versus the other myeloid clusters v rest differential gene expression
 
 ```{r}
@@ -277,46 +219,34 @@ First the MDSCs.
 
 ```{r}
 p <- plot_v_inflamm(dge_MDSC.v.myeloid, "Cluster 0: MDSC")
-p +
-    geom_text_repel(
-        data = ~ ..1 %>%
-            filter(direction == "opposed") %>% 
-            slice_max(order_by = abs(inflamm) + abs(`Cluster 0: MDSC`), 
-                      n = 30),
-        max.overlaps = Inf, 
-        color = "blue"
-    ) +
-    labs(caption = "showing top 30 most differential") + 
-    coord_fixed()
-```
-
-The same plot, but interactive. 
-
-```{r}
-ggplotly(p)
+p #+
+    # geom_text_repel(
+    #     data = ~ ..1 %>%
+    #         filter(direction == "opposed") %>% 
+    #         slice_max(order_by = abs(inflamm) + abs(`Cluster 0: MDSC`), 
+    #                   n = 30),
+    #     max.overlaps = Inf, 
+    #     color = "blue"
+    # ) +
+    # labs(caption = "showing top 30 most differential") + 
+    # coord_fixed()
 ```
 
 Now the M2 macs. 
 
 ```{r}
 p <- plot_v_inflamm(dge_m2.v.myeloid, "Cluster 6: M2 macs")
-p +
-    geom_text_repel(
-        data = ~ ..1 %>%
-            filter(direction == "opposed") %>% 
-            slice_max(order_by = abs(inflamm) + abs(`Cluster 6: M2 macs`), 
-                      n = 30),
-        max.overlaps = Inf, 
-        color = "blue"
-    ) +
-    labs(caption = "showing top 30 most differential") + 
-    coord_fixed()
-```
-
-The same plot, but interactive. 
-
-```{r}
-ggplotly(p)
+p #+
+    # geom_text_repel(
+    #     data = ~ ..1 %>%
+    #         filter(direction == "opposed") %>% 
+    #         slice_max(order_by = abs(inflamm) + abs(`Cluster 6: M2 macs`), 
+    #                   n = 30),
+    #     max.overlaps = Inf, 
+    #     color = "blue"
+    # ) +
+    # labs(caption = "showing top 30 most differential") + 
+    # coord_fixed()
 ```
 
 ## Compare inflammatory monocytes to other myeloid clusters (v all)
@@ -372,7 +302,7 @@ dge_m2.v.all %>%
 
 Compare the genes in the inflammatory v rest myeloid differential gene expression versus the ccr2 v rest myeloid differential gene expression
 
-```{r}
+```{r, eval = F}
 plot_v_inflamm_ALL <- function(dge_df, dge_df_name = "") {
     plot_df <- bind_rows(
     as_tibble(dge_inflamm.v.all, rownames = "gene") %>% mutate(celltype = "inflamm"),
@@ -394,7 +324,7 @@ p <- plot_df %>%
 
 First the MDSCs. 
 
-```{r}
+```{r, eval = F}
 p <- plot_v_inflamm_ALL(dge_mdsc.v.all, "Cluster 0: MDSC")
 p +
     geom_text_repel(
@@ -409,15 +339,9 @@ p +
     coord_fixed()
 ```
 
-The same plot, but interactive. 
-
-```{r}
-ggplotly(p)
-```
-
 Now the M2 macs. 
 
-```{r}
+```{r, eval = F}
 p <- plot_v_inflamm_ALL(dge_m2.v.all, "Cluster 6: M2 macs")
 p +
     geom_text_repel(
@@ -430,12 +354,6 @@ p +
     ) +
     labs(caption = "showing top 30 most differential") + 
     coord_fixed()
-```
-
-The same plot, but interactive. 
-
-```{r}
-ggplotly(p)
 ```
 
 # Assessing DGE properties and quality
@@ -459,7 +377,6 @@ p <- plot_df %>%
     geom_point(size = 0.5)
 p + 
     geom_text_repel(data = ~..1 %>% filter(inflamm.v.all*inflamm.v.myeloid<0))
-ggplotly(p)
 ```
 
 
@@ -478,7 +395,6 @@ p <- plot_df %>%
     geom_point(size = 0.5)
 p + 
     geom_text_repel(data = ~..1 %>% filter(ccr2.v.all*ccr2.v.myeloid<0))
-ggplotly(p)
 ```
 
 # Create signatures from DGE
@@ -584,7 +500,6 @@ go_inflamm_out <- run_or_readRDS(
         )
     }
 )
-go_inflamm_out@result %>% datatable()
 ```
 
 ```{r}
@@ -600,7 +515,6 @@ go_ccr2_out <- run_or_readRDS(
         )
     }
 )
-go_ccr2_out@result %>% datatable()
 
 
 ```
@@ -619,7 +533,6 @@ go_same_out <- run_or_readRDS(
         )
     }
 )
-go_same_out@result %>% datatable()
 ```
 
 
