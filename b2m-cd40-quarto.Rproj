@@ -17,3 +17,7 @@ AutoAppendNewline: Yes
 StripTrailingWhitespace: Yes
 
 QuitChildProcessesOnExit: Yes
+
+PythonType: conda
+PythonVersion: 3.12.2
+PythonPath: ~/miniconda3/envs/biopython_env/bin/python3.12
