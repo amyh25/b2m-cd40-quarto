@@ -1,0 +1,114 @@
+---
+title: "Folr2 correlates"
+---
+
+```{r}
+library(here)
+source(here("lib", "setup.R"))
+source(here("lib", "helper_Seurat.R"))
+source(here("lib", "helper.R"))
+source(here("lib", "aesthetics.R"))
+
+dir.create(file.path(results_dir, "folr2_correlates"))
+```
+
+```{r}
+so <- readRDS(file.path(results_dir, "so_filterRNA200mito10_subsetMremovedoublets.rds"))
+```
+
+```{r}
+so_ctrl <- subset(so %>% set_idents("group"), idents = "Ctrl__Isotype")
+```
+
+```{r}
+so_ctrl <- run_seurat_rna_workflow(so_ctrl)
+DimPlot(so_ctrl %>% set_idents("clusters_M"), label = T) + 
+  coord_fixed()
+FeaturePlot(so_ctrl, features = c("Folr2"))
+```
+
+```{r}
+genes <- read_excel(here("data", "Folr2_correlation_markers.xlsx"), col_names = F)[[1]]
+
+genes <- genes[-which(genes == "Mx1")]
+genes <- genes[-which(genes == "Cxcl11")]
+```
+
+```{r}
+folr2_df <- get_gene_expr_from_so(so_ctrl, gene_vec = c("Folr2", "Mki67"))
+genes_df <- get_gene_expr_from_so(so_ctrl, gene_vec = genes)
+genes_df <- folr2_df %>% left_join(genes_df, by = "cell")
+genes_tidy <- genes_df %>% 
+  pivot_longer(cols = 3:ncol(.))
+genes_list <- named_group_split(genes_tidy, name)
+```
+
+```{r}
+for (gene_str in names(genes_list)) {
+  print(gene_str)
+  
+  pdf(
+    file.path(results_dir, "folr2_correlates", paste0(gene_str, ".pdf")),
+    height = 3,
+    width = 3
+  )
+  
+  p <- ggplot(genes_list[[gene_str]]) +
+    aes(log1p(value), log1p(Folr2)) +
+    geom_scattermore(pointsize = 4.1,
+                     alpha = 0.7,
+                     pixels = c(1024, 1024)) +
+    stat_cor() +
+    stat_smooth() +
+    labs(x = sprintf("log1p(%s)", gene_str), 
+         title = gene_str) +
+    theme(plot.title = element_text(hjust = 0.5))
+  print(p)
+  
+  dev.off()
+}
+```
+
+## Just Cluster 3 M2-like macs subset
+
+```{r}
+so_m2 <- subset(so_ctrl %>% set_idents("clusters_M"), idents = "3: M2-like mac")
+```
+
+```{r}
+folr2_df <- get_gene_expr_from_so(so_m2, gene_vec = c("Folr2", "Mki67"))
+genes_df <- get_gene_expr_from_so(so_m2, gene_vec = genes)
+genes_df <- folr2_df %>% left_join(genes_df, by = "cell")
+genes_tidy <- genes_df %>% 
+  pivot_longer(cols = 3:ncol(.))
+genes_list <- named_group_split(genes_tidy, name)
+```
+
+```{r}
+for (gene_str in names(genes_list)) {
+  print(gene_str)
+  
+  pdf(
+    file.path(results_dir, "folr2_correlates", paste0("clust3.m2.only_", gene_str, ".pdf")),
+    height = 3,
+    width = 3
+  )
+  
+  p <- ggplot(genes_list[[gene_str]]) +
+    aes(log1p(value), log1p(Folr2)) +
+    geom_scattermore(pointsize = 4.1,
+                     alpha = 0.7,
+                     pixels = c(1024, 1024)) +
+    stat_cor() +
+    stat_smooth() +
+    labs(x = sprintf("log1p(%s)", gene_str), 
+         title = gene_str) +
+    theme(plot.title = element_text(hjust = 0.5))
+  print(p)
+  
+  dev.off()
+}
+```
+
+
+
