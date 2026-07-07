@@ -332,24 +332,6 @@ get_wide_tbl_from_markers <- function(.tbl,
     dplyr::select(1, order_i + 1)
 }
 
-# TODO implement other ways to get wide markers,
-# Here's some sample code that I wrote that could be generalized:
-
-# markers_wide <- markers_df %>% get_wide_tbl_from_markers()
-# write_csv(markers_wide, file.path(results_dir, "so_filterRNA200mito10_subsetM_markers08wide.csv"))
-#
-# markers_readable <- markers_df %>%
-#     filter(p_val_adj < 0.01) %>%
-#     filter(avg_log2FC > 0) %>%
-#     group_by(cluster) %>%
-#     arrange(desc(avg_log2FC)) %>%
-#     mutate(rank = row_number()) %>%
-#     pivot_wider(id_cols = rank,
-#                 names_from = cluster,
-#                 values_from = gene) %>%
-#     dplyr::select(rank, as.character(c(0:20)))
-# write_csv(markers_readable, file.path(results_dir, "so_filterRNA200mito10_subsetM_markers08readable.csv"))
-
 # SCP export functions -------
 
 #' @name scp_export_counts

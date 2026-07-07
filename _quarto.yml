@@ -21,7 +21,6 @@ book:
       - book/06_gdT.qmd
       - book/07_NK_cells.qmd
       - book/08_run_vision.qmd
-      # - book/09_ifng.qmd
       - book/10_pb.qmd
       - book/11_doublet_analysis.qmd
       - book/12_pb-and-sc_comparing_b2m_KO_and_WT.qmd
@@ -33,7 +32,6 @@ book:
       - book/14_inflammatory_monocyte_signature.qmd
       - book/15_prelim_tcga_analysis.qmd
       - book/16_full_tcga_analysis.qmd
-      # - book/17_other_clinical_signatures.qmd
     - part: "Miscellaneous"
       chapters:
       - book/export-proportions.qmd
