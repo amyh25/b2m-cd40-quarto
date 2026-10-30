@@ -1,0 +1,302 @@
+---
+title: "Comparing B2m KO and WT"
+execute: 
+  freeze: auto 
+  warning: false
+  message: false
+---
+
+```{r}
+library(here)
+source(here("lib", "setup.R"))
+source(here("lib", "helper_Seurat.R"))
+source(here("lib", "helper.R"))
+source(here("lib", "aesthetics.R"))
+library(DESeq2)
+library(liger)
+library(DT)
+library(plotly)
+
+TEXT_SIZE <- 12
+
+```
+
+## Myeloid subset
+
+```{r}
+so_M <- readRDS(file.path(results_dir, "so_filterRNA200mito10_subsetMremovedoublets.rds"))
+```
+
+### Pseudobulk
+
+```{r}
+
+so_iso_M <- subset(so_M %>% set_idents("treatment"), idents = "Isotype")
+so_iso_M <- AddMetaData(
+    so_iso_M,
+    metadata = so_iso_M@meta.data %>%
+        mutate(mouse_no_underscore = str_replace_all(mouse, "_", ".")) %>%
+        select(mouse_no_underscore)
+)
+```
+
+```{r}
+get_metadata_from_so(so_iso_M) %>% 
+  plot_umap(color_str = "general_M_subtypes", label = T)
+
+so_iso_M <- AddMetaData(
+    so_iso_M,
+    metadata = so_iso_M@meta.data %>%
+      mutate(general_M_subtypes_grouped = case_when(
+        general_M_subtypes %in% c("MDSC", "Proliferating", "Macrophages", "Monocytes") ~ "Mac/mono", 
+        TRUE ~ general_M_subtypes
+      )) %>% 
+      dplyr::select(general_M_subtypes_grouped)
+)
+```
+
+```{r}
+out <- run_or_readRDS(
+  file.path(results_dir, "pb_iso_Mgrouped.rds"),
+  function() {
+    pb_list <-
+      make_pseudobulk(so_iso_M, "general_M_subtypes_grouped", "mouse_no_underscore", "genotype")
+    deseq_list <-
+      map(pb_list,
+          ~ pb_to_deseq(..1, sample_var = "general_M_subtypes_grouped", vars = "genotype"))
+    rlog_list <-
+      map(deseq_list, rlog, blind = TRUE)
+    return(list(pb_list, deseq_list, rlog_list))
+  }
+)
+
+pb_list <- out[[1]]
+deseq_list <- out[[2]]
+rlog_list <- out[[3]]
+```
+
+```{r}
+norm_counts <- counts(deseq_list$`Mac/mono`, normalized = TRUE) %>%
+      as_tibble(rownames = "gene")
+saveRDS(norm_counts, file.path(results_dir, "pb_iso_macs_norm_counts.rds"))
+```
+
+```{r, eval = FALSE}
+results(deseq_list$`Mac/mono`) %>% 
+  as_tibble(rownames = "gene") %>% 
+  filter(log2FoldChange > 0) %>% 
+  arrange(padj) %>% 
+  filter(str_detect(gene, "Rpl|Rps", negate = TRUE)) %>% 
+  datatable()
+```
+
+```{r, eval = F}
+results(deseq_list$`Mac/mono`) %>% 
+  as_tibble(rownames = "gene") %>% 
+  filter(log2FoldChange < 0) %>% 
+  arrange(padj) %>% 
+  filter(str_detect(gene, "Rpl|Rps", negate = TRUE)) %>% 
+  datatable()
+```
+
+```{r}
+pb_dge_df <- results(deseq_list$`Mac/mono`) %>% 
+  as_tibble(rownames = "gene") 
+write_tsv(pb_dge_df, file.path(results_dir, "dge_pb_iso_macs_b2m.v.wt.tsv"))
+```
+
+#### Heatmap visualization
+
+```{r}
+dge_b2m.v.WT <- pb_dge_df
+
+topn <- 100
+top_n_genes <- dge_b2m.v.WT %>% 
+  filter(log2FoldChange > 0) %>% 
+  arrange(padj) %>% 
+  head(topn) %>% 
+  .$gene
+bot_n_genes <- dge_b2m.v.WT %>% 
+  filter(log2FoldChange < 0) %>% 
+  arrange(padj) %>% 
+  head(topn) %>% 
+  .$gene
+```
+
+Looking at the top 100 genes, either way
+
+```{r, fig.width = 3, fig.height = 5}
+h_mtx <- norm_counts %>% 
+  filter(gene %in% top_n_genes | gene %in% bot_n_genes) %>% 
+  mutate(gene = factor(gene, levels = c(top_n_genes, rev(bot_n_genes)))) %>% 
+  arrange(gene) %>% 
+  column_to_rownames("gene") %>% 
+  as.matrix() %>% 
+  t() %>% 
+  scale() %>% 
+  t()
+Heatmap(h_mtx, 
+        cluster_rows = FALSE, 
+        name = "scaled expr.",
+        show_row_names = FALSE)
+```
+
+### Single cell
+
+```{r}
+m_dir <- file.path(results_dir, "subsetMremoveddoublets")
+dge_b2m.v.WT <- readRDS(
+    file.path(
+        m_dir,
+        "dge_filterRNA200mito10_subsetM_markers_isotype_macs_b2m.v.wt.rds"
+    )
+) %>% 
+    as_tibble(rownames = "gene")
+```
+
+```{r, eval = FALSE}
+datatable(dge_b2m.v.WT %>%
+            filter(avg_log2FC > 0) %>%
+            arrange(p_val_adj) %>%
+            filter(str_detect(gene, "Rpl|Rps", negate = TRUE)))
+```
+
+```{r, eval = FALSE}
+datatable(dge_b2m.v.WT %>%
+            filter(avg_log2FC < 0) %>%
+            arrange(p_val_adj) %>%
+            filter(str_detect(gene, "Rpl|Rps", negate = TRUE)))
+```
+
+
+```{r}
+top_b2m <- dge_b2m.v.WT %>% 
+    filter(avg_log2FC > 0) %>% 
+    arrange(p_val, desc(avg_log2FC)) %>% 
+    filter(str_detect(gene, "Rpl|Rps", negate = TRUE)) %>% 
+    head(6) 
+top_wt <- dge_b2m.v.WT %>% 
+    filter(avg_log2FC < 0) %>% 
+    arrange(p_val, desc(avg_log2FC)) %>% 
+    filter(str_detect(gene, "Rpl|Rps", negate = TRUE)) %>% 
+    head(6)
+gene_df <- get_metadata_from_so(so_M, genes = c(top_b2m$gene, top_wt$gene)) %>% 
+    filter(!(clusters_M %in% c("8: Monocytic DCs", "9: cDC1", "10: Migratory DCs", "11: pDC", "12: Neutrophils"))) %>% 
+    filter(treatment == "Isotype")
+gene_df %>%
+    pivot_longer(cols = c(top_b2m$gene, top_wt$gene)) %>%
+    mutate(cat = ifelse(name %in% top_b2m$gene, "higher in B2m KO", "higher in WT")) %>%
+    mutate(cat = factor(cat, levels = c("higher in WT", "higher in B2m KO"))) %>% 
+    mutate(genotype = ifelse(genotype == "Ctrl", "WT", genotype)) %>% 
+    ggplot() +
+    aes(name, value) +
+    see::geom_violinhalf(aes(fill = genotype), 
+                         scale = "width",
+                         color = NA, 
+                         data = ~..1 %>% filter(genotype == "B2m KO")) + 
+    see::geom_violinhalf(aes(fill = genotype), 
+                         scale = "width",
+                         color = NA, 
+                         data = ~..1 %>% filter(genotype == "WT"), 
+                         flip = TRUE) + 
+    scale_fill_manual(values = palette_genotype_renamed) + 
+    scale_y_continuous(expand = c(0, 0)) + 
+    facet_wrap( ~ cat, scale = "free_x") + 
+    remove_x_spine() + 
+    theme(legend.position = c(0.3, 0.95),
+          legend.direction = "horizontal",
+          axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1.2)) + 
+    labs(x = "gene", y = "log-normalized expr.")
+```
+
+### Compare pseudobulk and single cell
+
+```{r}
+joined_df <- results(deseq_list$`Mac/mono`) %>% 
+  as_tibble(rownames = "gene") %>% 
+  left_join(dge_b2m.v.WT, by = "gene") 
+```
+
+```{r}
+#| fig-asp: 1
+#| fig-width: 5
+
+p <- joined_df %>% 
+  mutate(signed_pval_sc = ifelse(avg_log2FC > 0, -log10(p_val_adj), log10(p_val_adj))) %>% 
+  mutate(signed_pval_pb = ifelse(log2FoldChange > 0, -log10(padj), log10(padj))) %>% 
+  ggplot() + 
+  aes(signed_pval_sc, signed_pval_pb) + 
+  geom_scattermore(pointsize = 1.9)
+p + 
+  theme(aspect.ratio = 1)
+```
+
+```{r, eval = FALSE}
+ggplotly(p +
+           geom_point(aes(label = gene),
+                      data = ~ ..1 %>% arrange(padj) %>% head(50), 
+                      color = "red") +
+           geom_point(aes(label = gene), 
+                      data = ~ ..1 %>% arrange(p_val_adj) %>% head(50), 
+                      color = "blue"))
+```
+
+
+## ssGSEA
+
+```{r}
+sig_dir <- here("data", "signatures")
+mouse_human_genes <- readRDS(here("data", "mouse_human_genes.rds")) %>% 
+    as_tibble()
+jablonski_df <-
+    read_tsv(
+        file.path(
+            sig_dir,
+            "m2_sigs",
+            "Combined_Jablonski_Alt_Class_Mac.gmt.txt"
+        ),
+        col_names = FALSE
+    ) %>% 
+    dplyr::rename(signature = X1, source = X2) %>% 
+    dplyr::select(-X759) %>% 
+    pivot_longer(cols = 3:ncol(.), 
+                 names_to = "column", 
+                 values_to = "gene") %>% 
+    filter(!is.na(gene)) %>% 
+    dplyr::select(-column) %>% 
+    left_join(mouse_human_genes, by = c("gene" = "HGNC.symbol")) %>% 
+    dplyr::rename(human_gene = gene) %>% 
+    dplyr::rename(gene = MGI.symbol) 
+jablonski_gs <- jablonski_df %>% 
+    drop_na(gene) %>% 
+    named_group_split(signature) %>% 
+    map(~..1$gene)
+```
+
+```{r}
+ranked_b2m_KO <- results(deseq_list$`Mac/mono`) %>% 
+  as_tibble(rownames = "gene") %>% 
+    mutate(signed_pval = ifelse(log2FoldChange > 0, -log10(pvalue + 1e-100), log10(pvalue + 1e-100))) %>% 
+    arrange(desc(signed_pval), desc(log2FoldChange)) %>% 
+    {set_names(.$signed_pval, .$gene)}
+altact_jab_df <- Rsc::get_leading_edge_df(ranked_b2m_KO, gs_vec = jablonski_gs$`AltActivated(IL4)_Jablonski`)
+leg_df <- jablonski_gs %>% 
+    map_dfr(~Rsc::get_leading_edge_df(ranked_b2m_KO, gs_vec = ..1), 
+            .id = "gs_name") 
+```
+
+```{r}
+library(liger)
+gsea_out <- run_or_readRDS(
+  file.path(results_dir, "gsea_pb_iso_macs_jablonski.rds"), 
+  function() {
+    iterative.bulk.gsea(values = ranked_b2m_KO,
+                        set.list = jablonski_gs,
+                        power = 0)
+  }
+)
+```
+
+
+
+

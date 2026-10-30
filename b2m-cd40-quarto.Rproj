@@ -1,0 +1,23 @@
+Version: 1.0
+ProjectId: 63ebd532-26d1-4833-9fea-133d196fbbab
+
+RestoreWorkspace: No
+SaveWorkspace: No
+AlwaysSaveHistory: No
+
+EnableCodeIndexing: Yes
+UseSpacesForTab: Yes
+NumSpacesForTab: 2
+Encoding: UTF-8
+
+RnwWeave: Sweave
+LaTeX: pdfLaTeX
+
+AutoAppendNewline: Yes
+StripTrailingWhitespace: Yes
+
+QuitChildProcessesOnExit: Yes
+
+PythonType: conda
+PythonVersion: 3.12.2
+PythonPath: ~/miniconda3/envs/biopython_env/bin/python3.12

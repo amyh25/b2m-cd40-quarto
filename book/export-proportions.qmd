@@ -1,0 +1,134 @@
+---
+title: "Export proportions"
+execute: 
+  freeze: auto
+---
+
+```{r}
+library(here)
+source(here("lib", "setup.R"))
+source(here("lib", "helper_Seurat.R"))
+source(here("lib", "helper.R"))
+source(here("lib", "aesthetics.R"))
+```
+
+```{r}
+so_full <- readRDS(file.path(results_dir, "so_filterRNA200mito10.rds"))
+so_T <- readRDS(file.path(results_dir, "so_filterRNA200mito10_subsetTremovedoublets.rds"))
+so_M <- readRDS(file.path(results_dir, "so_filterRNA200mito10_subsetMremovedoublets.rds"))
+```
+
+## Cluster proportions
+
+```{r}
+metadata_full_df <-
+  as_tibble(so_full@meta.data, rownames = "cell") %>%
+  select(cell, general_cell_types, mouse)
+metadata_T_df <- as_tibble(so_T@meta.data, rownames = "cell") %>%
+  select(cell, clusters_T, general_T_subtypes)
+metadata_M_df <- as_tibble(so_M@meta.data, rownames = "cell") %>%
+  select(cell, clusters_M, general_M_subtypes)
+
+metadata_df <- metadata_full_df %>%
+  left_join(metadata_T_df, by = "cell") %>%
+  left_join(metadata_M_df, by = "cell")
+```
+
+### Not split by mouse
+
+```{r}
+prop_df <- metadata_df %>%
+  mutate(subcluster = ifelse(
+    is.na(clusters_T),
+    as.character(clusters_M),
+    as.character(clusters_T)
+  )) %>%
+  group_by(general_cell_types, subcluster) %>%
+  summarise(n = n()) %>%
+  ungroup() %>%
+  mutate(
+    subcluster = case_when(
+      general_cell_types == "Myeloid" & is.na(subcluster) ~ "doublets",
+      general_cell_types == "T/NK" &
+        is.na(subcluster) ~ "doublets",
+      TRUE ~ subcluster
+    )
+  ) %>%
+  mutate(proportion_of_all = n / sum(n)) %>%
+  group_by(general_cell_types) %>%
+  mutate(proportion_of_general_cell_type = n / sum(n)) %>%
+  ungroup()
+```
+
+```{r}
+write_csv(prop_df, file.path(results_dir, "cluster_proportions_for_Brian.csv"))
+```
+
+### Split by mouse
+
+```{r}
+prop_df <- metadata_df %>%
+  mutate(subcluster = ifelse(
+    is.na(clusters_T),
+    as.character(clusters_M),
+    as.character(clusters_T)
+  )) %>%
+  group_by(general_cell_types, subcluster, mouse) %>%
+  summarise(n = n()) 
+```
+
+```{r}
+prop_wide <- prop_df %>% 
+  pivot_wider(id_cols = c(general_cell_types, subcluster), 
+              names_from = mouse, 
+              values_from = n, 
+              values_fill = 0)
+write_csv(prop_wide, file.path(results_dir, "cluster_proportions_for_Brian_by_mouse.csv"))
+```
+
+# Cluster & genotype proprotions
+
+```{r}
+metadata_full_df <- as_tibble(so_full@meta.data, rownames = "cell") %>%
+    select(cell, general_cell_types, genotype, treatment)
+metadata_T_df <- as_tibble(so_T@meta.data, rownames = "cell") %>%
+    select(cell, clusters_T, general_T_subtypes)
+metadata_M_df <- as_tibble(so_M@meta.data, rownames = "cell") %>%
+    select(cell, clusters_M, general_M_subtypes)
+
+metadata_df <- metadata_full_df %>%
+    left_join(metadata_T_df, by = "cell") %>%
+    left_join(metadata_M_df, by = "cell")
+
+genotype_prop_df <- metadata_df %>%
+    mutate(subcluster = ifelse(
+        is.na(clusters_T),
+        as.character(clusters_M),
+        as.character(clusters_T)
+    )) %>%
+    group_by(general_cell_types, subcluster, genotype, treatment) %>%
+    summarise(n = n()) %>%
+    ungroup() %>%
+    mutate(
+        subcluster = case_when(
+            general_cell_types == "Myeloid" & is.na(subcluster) ~ "doublets",
+            general_cell_types == "T/NK" &
+                is.na(subcluster) ~ "doublets",
+            TRUE ~ subcluster
+        )
+    ) %>%
+    group_by(general_cell_types, subcluster) %>%
+    mutate(proportion_of_subcluster = n / sum(n)) %>%
+    pivot_wider(
+        id_cols = c(general_cell_types, subcluster),
+        names_from = c(genotype, treatment),
+        values_from = c(n, proportion_of_subcluster)
+    )
+```
+
+```{r}
+prop_df %>%
+    left_join(genotype_prop_df, by = c("general_cell_types", "subcluster")) %>%
+    write_csv(file.path(results_dir, "cluster_proportions_for_Brian_with_genotypes.csv"))
+```
+

@@ -1,0 +1,347 @@
+---
+execute: 
+  freeze: true
+  message: false
+  warning: false
+---
+
+```{r, message = FALSE}
+library(here)
+source(here("lib", "setup.R"))
+source(here("lib", "helper_Seurat.R"))
+source(here("lib", "helper.R"))
+source(here("lib", "aesthetics.R"))
+```
+
+```{r}
+so <- readRDS(file.path(results_dir, "so_filterRNA200mito10.rds"))
+```
+
+# Examining clustering
+
+```{r, fig.width = 21, fig.asp = 1/3}
+p1 <- get_metadata_from_so(so, metadata = "RNA_snn_res.0.1") %>% 
+    plot_umap(color_str = "RNA_snn_res.0.1", label = TRUE) 
+p2 <- get_metadata_from_so(so, metadata = "RNA_snn_res.0.5") %>% 
+    mutate(RNA_snn_res.0.5 = factor(RNA_snn_res.0.5, levels = 0:17)) %>% 
+    plot_umap(color_str = "RNA_snn_res.0.5", label = TRUE) 
+p3 <- get_metadata_from_so(so, metadata = "RNA_snn_res.0.9") %>%  
+    mutate(RNA_snn_res.0.5 = factor(RNA_snn_res.0.9, levels = 0:24)) %>% 
+    plot_umap(color_str = "RNA_snn_res.0.9", label = TRUE) 
+plot_grid(p1, p2, p3, ncol = 3)
+```
+
+```{r, fig.asp = 1/3}
+clustree::clustree(so, prefix = "RNA_snn_res.")
+```
+
+# Identify differential markers in res 0.5
+
+```{r, eval = FALSE}
+markers_df <- FindAllMarkers(so %>% set_idents("RNA_snn_res.0.5"))
+saveRDS(markers_df, file.path(results_dir, "so_filterRNA200mito10_markers05.rds"))
+markers_df <- readRDS(file.path(results_dir, "so_filterRNA200mito10_markers05.rds"))
+```
+
+```{r, eval = FALSE}
+markers_wide <- markers_df %>% get_wide_tbl_from_markers()
+write_csv(markers_wide, file.path(results_dir, "so_filterRNA200mito10_markers05wide.csv"))
+```
+
+```{r, eval = FALSE}
+markers_readable <- markers_df %>% 
+    filter(p_val_adj < 0.01) %>% 
+    filter(avg_log2FC > 0) %>% 
+    group_by(cluster) %>% 
+    arrange(desc(avg_log2FC)) %>% 
+    mutate(rank = row_number()) %>% 
+    pivot_wider(id_cols = rank, 
+                names_from = cluster, 
+                values_from = gene) %>% 
+    dplyr::select(rank, as.character(0:17))
+write_csv(markers_readable, file.path(results_dir, "so_filterRNA200mito10_markers05readable.csv"))
+```
+
+# Assign clusters
+
+```{r, message = F}
+cluster_ann_df <- readxl::read_excel(file.path(results_dir, "cluster_annotations.xlsx")) %>% 
+    tidyr::fill(Subset, clustering) %>% 
+    filter(Subset == "so_filterRNA200mito10.rds") %>% 
+    filter(clustering == "RNA_snn_res.0.5") %>% 
+    mutate(cluster_ID_name = paste0(cluster, ": ", cluster_ID))
+
+cluster_key <-
+    cluster_ann_df$cluster_ID_name %>% set_names(cluster_ann_df$cluster)
+cluster_grouped_key <-
+    cluster_ann_df$cluster_ID_grouped %>% set_names(cluster_ann_df$cluster)
+
+palette_cluster <- cluster_ann_df$color %>% set_names(cluster_ann_df$cluster_ID_name)
+
+cluster_ID_name_ordered <- cluster_ann_df %>% 
+    arrange(cluster_ID_grouped) %>% 
+    .$cluster_ID_name
+```
+
+```{r}
+cell_type_metadata <- get_metadata_from_so(so, metadata = "RNA_snn_res.0.5", reduction = NULL) %>%
+    mutate(clusters = cluster_key[as.character(RNA_snn_res.0.5)]) %>% 
+    mutate(general_cell_types = cluster_grouped_key[as.character(RNA_snn_res.0.5)]) %>% 
+    select(-RNA_snn_res.0.5) %>% 
+    column_to_rownames("cell")
+so <- AddMetaData(so, metadata = cell_type_metadata)
+```
+
+```{r}
+get_metadata_from_so(so, metadata = "clusters") %>% 
+    plot_umap(color_str = "clusters", label = TRUE) + 
+    theme(legend.position = "none") + 
+    scale_color_manual(values = palette_cluster)
+get_metadata_from_so(so, metadata = "general_cell_types") %>% 
+    plot_umap(color_str = "general_cell_types", label = TRUE) + 
+    theme(legend.position = "none")
+```
+
+# Marker dot plot
+
+```{r}
+genes <- c(
+    "Pmel", "Mlana", # Tumor
+    "Klre1", "Klra7", "Klrd1", # NK
+    "Mki67", "Stmn1", "Top2a", # prolif, 
+    "Cd3d", "Trbc2", "Trac", "Cd8a", # T cell
+    "Col4a1", # EC
+    "Col3a1", # Fibroblasts
+    "Siglech", # pDCs 
+    "S100a9", "S100a8", # Neutrophils
+    "Irf8", # Irf8 high DCs
+    "Ccr7", "Fscn1", # Migratory DCs
+    "Cd209a", "H2-Ab1", # Monocytic DCs
+    "Wfdc17", # M2a macs
+    "Ccl12", "C1qa", "C1qb", # M1/M2b macs
+    "Mmp12", "Arg1", # MDSC
+    "Chil3", "Il1b", # Monocyte/Neuts
+    "Igkc", "Jchain" # B cells
+)
+
+# learned a new way to add color to axis tick labels in https://datavizpyr.com/add-colors-to-axis-tick-label-in-ggplot2/
+dotplot_df <-
+    get_metadata_from_so(so,
+                         metadata = "clusters",
+                         genes = genes,
+                         reduction = NULL) %>%
+    pivot_longer(cols = 3:ncol(.),
+                 names_to = "gene",
+                 values_to = "expr") %>%
+    mutate(clusters = factor(clusters, levels = cluster_ID_name_ordered)) %>% 
+    mutate(gene = factor(gene, levels = genes)) %>% 
+    group_by(gene) %>%
+    mutate(scaled_expr = as.vector(scale(expr))) %>%
+    group_by(clusters, gene) %>%
+    summarise(mean_scaled_expr = mean(expr)) %>%
+    mutate(
+        color = palette_cluster[as.character(clusters)], 
+        name = glue::glue("<i style='color:{color}'>{clusters}</i>")
+    ) %>% 
+    mutate(name = fct_reorder(name, as.integer(clusters)))
+dotplot_df %>% 
+    ggplot() +
+    aes(gene, name) +
+    geom_point(aes(size = mean_scaled_expr, color = mean_scaled_expr)) + 
+    labs(caption = "color and size are scaled mean expression; cell types not shown in any particular order here") + 
+    scale_color_viridis() + 
+    remove_spines() + 
+    theme(panel.background = element_rect(color = "black"), 
+          axis.title = element_blank(), 
+          legend.position = "none", 
+          axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5), 
+          axis.text.y = ggtext::element_markdown())
+```
+
+# cluster representation in samples
+
+## stacked bar plots
+
+```{r, fig.asp = 2, fig.width = 3}
+get_metadata_from_so(so) %>% 
+    group_by(clusters, group) %>% 
+    calculate_proportion(clusters, group) %>% 
+    mutate(clusters = factor(clusters, levels = cluster_ID_name_ordered)) %>% 
+    ggplot() + 
+    aes(group, prop, fill = clusters) + 
+    geom_col() + 
+    remove_x_spine() + 
+    scale_y_continuous(expand = c(0, 0)) + 
+    scale_fill_manual(values = palette_cluster) + 
+    theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5), 
+          legend.position = "none")
+```
+
+```{r, fig.asp = 2, fig.width = 3}
+get_metadata_from_so(so) %>% 
+    group_by(clusters, mouse) %>% 
+    calculate_proportion(clusters, mouse) %>% 
+    mutate(clusters = factor(clusters, levels = cluster_ID_name_ordered)) %>% 
+    ggplot() + 
+    aes(mouse, prop, fill = clusters) + 
+    geom_col() + 
+    remove_x_spine() + 
+    scale_y_continuous(expand = c(0, 0)) + 
+    scale_fill_manual(values = palette_cluster) + 
+    theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust =0.5), 
+          legend.position = "none")
+```
+
+## Bar plots with stats
+
+```{r}
+group_mouse_df <-
+    get_metadata_from_so(so,
+                         metadata = c("mouse", "group"),
+                         reduction = NULL) %>%
+    select(mouse, group) %>% unique()
+prop_df <-
+    get_metadata_from_so(so,
+                         metadata = c("mouse", "general_cell_types"),
+                         reduction = NULL) %>%
+    filter(!(general_cell_types %in% c("Tumor", "Stromal"))) %>%
+    calculate_proportion(general_cell_types, mouse) %>%
+    left_join(group_mouse_df, by = "mouse")
+prop_df %>%
+    ggplot() +
+    aes(group, prop) +
+    geom_boxplot() +
+    geom_point() +
+    labs(y = "Proportion of Immune cells", 
+         caption = "P-values from t tests") +
+    stat_compare_means(
+        comparisons = prop_df$group %>% unique() %>% combn(m = 2, simplify = F),
+        label = "p.signif",
+        method = "t.test"
+    ) +
+    facet_wrap(~ general_cell_types, scale = "free_y") +
+    scale_y_continuous(limits = ~ c(0, .[2] * 1.1),
+                       expand = c(0, 0)) +
+    remove_x_spine() +
+    theme(axis.text.x = element_text(
+        angle = 90,
+        hjust = 1,
+        vjust = 0.5
+    ))
+```
+
+## Galaxy plots
+
+```{r, fig.asp = 1/3, fig.width = 7}
+get_metadata_from_so(so, metadata = c("group")) %>% 
+    make_galaxy_plot(sample_n = 10000) + 
+    facet_wrap(~group, ncol = 4)
+```
+
+# Analysis
+
+## CD40 expression by cell type
+
+```{r}
+get_metadata_from_so(so, genes = "Cd40") %>% 
+    plot_violin(clusters, Cd40) +
+    scale_fill_manual(values = palette_cluster) + 
+    labs(y = "Gene Expression", title = "Cd40", subtitle = "All cells")
+get_metadata_from_so(so, genes = "Cd40") %>% 
+    filter(group == "Ctrl__Isotype") %>% 
+    plot_violin(clusters, Cd40) +
+    scale_fill_manual(values = palette_cluster) + 
+    labs(y = "Gene Expression", title = "Cd40", subtitle = "WT Isotype only")
+```
+
+# Save
+
+```{r}
+saveRDS(so, file.path(results_dir, "so_filterRNA200mito10.rds"))
+saveRDS(
+    as_tibble(so@meta.data, rownames = "cell"),
+    file.path(
+        results_dir,
+        "so_filterRNA200mito10_markers_metadata.rds"
+    )
+)
+```
+
+# UMAPs of Markers
+
+```{r}
+t_cell_genes <- c("Ptprc", "Cd3e", "Cd8a", "Cd4", "Trdc", "Foxp3", "Ikzf2", "Nkg7")
+t_cell_df <- get_metadata_from_so(so, genes = t_cell_genes, metadata = NULL)
+t_cell_df %>% 
+    pivot_longer(cols = all_of(t_cell_genes), names_to = "gene") %>% 
+    named_group_split(gene) %>% 
+    imap(~plot_umap(..1, color_str = "value") + labs(color = ..2) + 
+             theme(legend.title = element_text(size = 8))) %>% 
+    plot_grid(plotlist = ., ncol = 3, align = "hv")
+```
+
+```{r}
+mac_genes <- c("Fcgr4", "C1qa", "Wfdc17", "Il1b")
+mac_df <- get_metadata_from_so(so, genes = mac_genes, metadata = NULL)
+mac_df %>% 
+    pivot_longer(cols = all_of(mac_genes), names_to = "gene") %>% 
+    named_group_split(gene) %>% 
+    imap(~plot_umap(..1, color_str = "value") + labs(color = ..2)) %>% 
+    plot_grid(plotlist = ., ncol = 2, align = "hv")
+```
+
+```{r}
+m_genes <- c("Mmp12", "Arg1", "Ccl12", "Timp2")
+m_df <- get_metadata_from_so(so, genes = m_genes, metadata = NULL)
+m_df %>% 
+    pivot_longer(cols = all_of(m_genes), names_to = "gene") %>% 
+    named_group_split(gene) %>% 
+    imap(~plot_umap(..1, color_str = "value") + labs(color = ..2)) %>% 
+    plot_grid(plotlist = ., ncol = 2, align = "hv")
+```
+
+```{r}
+dc_genes <- c("Cd209a", "H2-Ab1", "Ccr7", "Fscn1", "Siglech", "Irf8")
+dc_df <- get_metadata_from_so(so, genes = dc_genes, metadata = NULL)
+dc_df %>% 
+    pivot_longer(cols = all_of(dc_genes), names_to = "gene") %>% 
+    named_group_split(gene) %>% 
+    imap(~plot_umap(..1, color_str = "value") + labs(color = ..2)) %>% 
+    plot_grid(plotlist = ., ncol = 3, align = "hv")
+```
+
+```{r}
+b_genes <- c("Jchain", "Ms4a1", "Cd19")
+b_df <- get_metadata_from_so(so, genes = b_genes, metadata = NULL)
+b_df %>% 
+    pivot_longer(cols = all_of(b_genes), names_to = "gene") %>% 
+    named_group_split(gene) %>% 
+    imap(~plot_umap(..1, color_str = "value") + labs(color = ..2)) %>% 
+    plot_grid(plotlist = ., ncol = 2, align = "hv")
+```
+
+```{r}
+neut_genes <- c("Hp", "Chil3")
+neut_df <- get_metadata_from_so(so, genes = neut_genes, metadata = NULL)
+neut_df %>% 
+    pivot_longer(cols = all_of(neut_genes), names_to = "gene") %>% 
+    named_group_split(gene) %>% 
+    imap(~plot_umap(..1, color_str = "value") + labs(color = ..2)) %>% 
+    plot_grid(plotlist = ., ncol = 2, align = "hv")
+```
+
+```{r}
+prolif_genes <- c("Mki67", "Top2a", "Stmn1")
+prolif_df <- get_metadata_from_so(so, genes = prolif_genes, metadata = NULL)
+prolif_df %>% 
+    pivot_longer(cols = all_of(prolif_genes), names_to = "gene") %>% 
+    named_group_split(gene) %>% 
+    imap(~plot_umap(..1, color_str = "value") + labs(color = ..2)) %>% 
+    plot_grid(plotlist = ., ncol = 2, align = "hv")
+```
+
+# END
+
+```{r}
+sessionInfo()
+```

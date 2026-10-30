@@ -1,0 +1,9 @@
+# Set up
+
+This section will describe all set up instructions required to run the TCGA analysis. 
+
+## Data
+
+To run the analyses, you will first need to download the source data. 
+
+

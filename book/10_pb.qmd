@@ -1,0 +1,710 @@
+---
+title: "Pseudobulk"
+execute: 
+  freeze: true
+  warning: false
+  message: false
+---
+
+```{r}
+library(here)
+source(here("lib", "setup.R"))
+source(here("lib", "helper_Seurat.R"))
+source(here("lib", "helper.R"))
+source(here("lib", "aesthetics.R"))
+library(DESeq2)
+library(liger)
+
+TEXT_SIZE <- 12
+```
+
+# Pseudobulk mac/monocyte populations
+
+```{r}
+so <- readRDS(file.path(results_dir, "so_filterRNA200mito10_subsetMremovedoublets.rds"))
+```
+
+```{r}
+metadata_df <- get_metadata_from_so(so)
+metadata_df$clusters_M %>% unique()
+```
+
+```{r}
+mac_metadata_df <- metadata_df %>%
+    filter(str_detect(clusters_M, "mac|monocyte|MDSC"))
+smallest_cell_count <- mac_metadata_df %>%
+    group_by(mouse) %>%
+    summarise(count = n()) %>%
+    .$count %>% 
+    min()
+cells <- mac_metadata_df %>%
+    group_by(mouse) %>%
+    slice_sample(n = smallest_cell_count) %>%
+    .$cell
+so_down <- subset(so, cells = cells)
+```
+
+## Split by treatment
+
+```{r}
+so_down <- AddMetaData(
+    so_down,
+    metadata = so_down@meta.data %>%
+        mutate(mouse_no_underscore = str_replace_all(mouse, "_", ".")) %>%
+        select(mouse_no_underscore)
+)
+out <- run_or_readRDS(file.path(results_dir, "pb_macs.rds"),
+                      function() {
+                          pb_list <-
+                              make_pseudobulk(so_down, "treatment", "mouse_no_underscore", "genotype")
+                          deseq_list <-
+                              map(pb_list,
+                                  ~ pb_to_deseq(..1, sample_var = "treatment", vars = "genotype"))
+                          rlog_list <- map(deseq_list, rlog, blind = TRUE)
+                          return(list(pb_list, deseq_list, rlog_list))
+                      })
+pb_list <- out[[1]]
+deseq_list <- out[[2]]
+rlog_list <- out[[3]]
+
+norm_counts <- purrr::map_dfr(
+    deseq_list,
+    ~counts(..1, normalized = TRUE) %>%
+      as_tibble(rownames = "gene"),
+    .id = "cluster"
+  ) %>%
+  pivot_longer(cols = 3:ncol(.),
+               names_to = "sample",
+               values_to = "norm_count") %>%
+  pivot_wider(id_cols = gene,
+              names_from = c(sample, cluster),
+              values_from = norm_count,
+              values_fill = 0)
+```
+
+```{r}
+get_pca_genes <- function(deseq_obj, ntop = 500) {
+  rv <- deseq_obj %>%
+    assay() %>%
+    rowVars()
+  select <- order(rv, decreasing = TRUE)[seq_len(min(ntop, length(rv)))]
+  pca <- prcomp(t(assay(deseq_obj)[select,]))
+  loadings <- as_tibble(pca$rotation, rownames = "gene")
+  return(loadings)
+}
+pca_loadings <- map(rlog_list, ~get_pca_genes(..1, ntop = dim(..1)[1])) %>%
+  imap(~mutate(..1, cluster_id = ..2)) %>%
+  purrr::reduce(bind_rows)
+```
+
+```{r, fig.width = 4, fig.height = 4}
+pca_list <- rlog_list %>% imap(~ {
+    DESeq2::plotPCA(..1, intgroup = "genotype", ntop = dim(..1)[1]) +
+        aes(shape = group) + 
+        scale_color_manual(values = palette_genotype) +
+        scale_x_continuous(expand = c(0.1, 0.1)) +
+        scale_y_continuous(expand = c(0.1, 0.1)) +
+        ggtitle(..2) +
+        theme(legend.key.height = unit(10, "pt"))
+})
+pca_list$Isotype
+pca_list$`CD40 agonist`
+```
+
+```{r}
+pca_loadings$cluster_id %>% unique()
+pca_loadings %>% 
+    filter(cluster_id == "Isotype") %>% 
+    arrange(PC1)
+```
+
+### GSEA
+
+```{r}
+sig_dir <- here("data", "signatures")
+mouse_human_genes <- readRDS(here("data", "mouse_human_genes.rds")) %>% 
+    as_tibble()
+jablonski_df <-
+    read_tsv(
+        file.path(
+            sig_dir,
+            "m2_sigs",
+            "Combined_Jablonski_Alt_Class_Mac.gmt.txt"
+        ),
+        col_names = FALSE
+    ) %>% 
+    dplyr::rename(signature = X1, source = X2) %>% 
+    dplyr::select(-X759) %>% 
+    pivot_longer(cols = 3:ncol(.), 
+                 names_to = "column", 
+                 values_to = "gene") %>% 
+    filter(!is.na(gene)) %>% 
+    dplyr::select(-column) %>% 
+    left_join(mouse_human_genes, by = c("gene" = "HGNC.symbol")) %>% 
+    dplyr::rename(human_gene = gene) %>% 
+    dplyr::rename(gene = MGI.symbol) 
+jablonski_gs <- jablonski_df %>% 
+    drop_na(gene) %>% 
+    named_group_split(signature) %>% 
+    map(~..1$gene)
+```
+
+```{r}
+ranked_b2m_KO <- results(deseq_list$Isotype) %>% 
+    as_tibble(rownames = "gene") %>% 
+    mutate(signed_pval = ifelse(log2FoldChange > 0, -log10(pvalue), log10(pvalue))) %>% 
+    arrange(desc(signed_pval)) %>% 
+    {set_names(.$signed_pval, .$gene)}
+
+library(liger)
+m_dir <- file.path(results_dir, "subsetMremoveddoublets")
+jablonski_gsea_out <-
+    run_or_readRDS(file.path(m_dir, "gsea_pseudobulk_b2m.v.wt_jablonski.rds"),
+                   function() {
+                       iterative.bulk.gsea(ranked_b2m_KO,
+                                           set.list = jablonski_gs,
+                                           power = 0)
+                   })
+```
+
+```{r}
+gsea(ranked_b2m_KO,
+     geneset = jablonski_gs$`AltActivated(IL4)_Jablonski`,
+     power = 0)
+gsea(ranked_b2m_KO,
+     geneset = jablonski_gs$`ClassicallyActivated(LPSIFNy)_Jablonski`,
+     power = 0)
+```
+
+
+```{r, fig.width = 5, fig.height = 3}
+jablonski_gsea_out %>% 
+    as_tibble(rownames = "gs_name") %>% 
+    arrange(desc(sscore)) %>% 
+    ggplot() +
+    aes(fct_reorder(gs_name, sscore), sscore) + 
+    geom_hline(yintercept = 0, linetype = "dotted", size = 0.2) + 
+    geom_point(aes(size = -log10(q.val), shape = q.val < 0.05)) + 
+    geom_segment(aes(xend = gs_name, yend = 0), size = 0.2) + 
+    geom_text(
+        aes(y = -0.1, label = gs_name),
+        hjust = 1,
+        size = 2,
+        data = ~ ..1 %>% filter(sscore > 0)
+    ) +
+    geom_text(
+        aes(y = 0.1, label = gs_name),
+        hjust = 0,
+        size = 2,
+        data = ~ ..1 %>% filter(sscore < 0)
+    ) + 
+    coord_flip() + 
+    scale_shape_manual(values = c(4, 19)) + 
+    scale_size(breaks = c(1, 2, 3)) + 
+    remove_spines() + 
+    theme(axis.title.y = element_blank(), 
+          axis.text.y = element_blank()) 
+```
+
+
+```{r, fig.width = 5, fig.height = 3}
+altact_jab_df <- Rsc::get_leading_edge_df(ranked_b2m_KO, gs_vec = jablonski_gs$`AltActivated(IL4)_Jablonski`)
+leg_df <- jablonski_gs %>% 
+    map_dfr(~Rsc::get_leading_edge_df(ranked_b2m_KO, gs_vec = ..1), 
+            .id = "gs_name") 
+p_curve <- leg_df %>% 
+    filter(str_detect(gs_name, "Jablonski")) %>% 
+    mutate(gs_name = gs_name %>% str_extract(".*_") %>% str_sub(end = -2)) %>% 
+    ggplot() + 
+    aes(rank, running_es) + 
+    geom_hline(yintercept = 0, linetype = "dashed", size = 0.2) + 
+    geom_line(aes(color = gs_name)) + 
+    scale_y_continuous(limits = ~c(..1[1]*1.4, ..1[2])) + 
+    remove_x_spine() + 
+    theme(legend.position = c(0.4, 0.65), 
+          legend.background = element_blank(), 
+          legend.title = element_blank(), 
+          axis.text.x = element_blank(), 
+          axis.title.x = element_blank()) + 
+    labs(y = "B2m KO <-- NES --> WT")
+p_ticks <- leg_df %>% 
+    filter(str_detect(gs_name, "Jablonski")) %>% 
+    mutate(gs_name = gs_name %>% str_extract(".*_") %>% str_sub(end = -2)) %>% 
+    filter(in_gs) %>% 
+    ggplot() + 
+    aes(rank, gs_name) + 
+    geom_point(aes(color = gs_name), shape = "|", size = 3, alpha = 0.5) + 
+    remove_spines() + 
+    theme(axis.text.y = element_blank(), 
+          axis.title.y = element_blank(), 
+          legend.position = "none", 
+          plot.margin = margin())
+plot_grid(p_curve, p_ticks, ncol = 1, align = "v", axis = "lr", rel_heights = c(3, 1))
+```
+
+### PC loading heatmaps
+
+
+```{r mean_scaled_norm_counts}
+scaled_norm_counts <- norm_counts %>%
+    pivot_longer(cols = 2:ncol(.),
+                 names_to = "sample_genotype_cluster",
+                 values_to = "norm_counts") %>%
+    separate(
+        sample_genotype_cluster,
+        into = c("sample", "genotype", "treatment"),
+        sep = "_"
+    ) %>%
+    group_by(gene, treatment) %>%
+    mutate(scaled_norm_counts = as.vector(scale(norm_counts, center = FALSE))) %>%
+    mutate(scaled_norm_counts = ifelse(is.na(scaled_norm_counts), 0,
+                                       scaled_norm_counts)) 
+scaled_norm_counts_wide <- scaled_norm_counts %>%
+    # group_by(genotype, cluster, gene) %>%
+    # summarise(avg_scaled_norm_counts = mean(scaled_norm_counts)) %>%
+    pivot_wider(
+        id_cols = gene,
+        names_from = c(sample, genotype, treatment),
+        values_from = scaled_norm_counts
+    )
+scaled_norm_counts_mtx <- scaled_norm_counts_wide %>%
+    column_to_rownames("gene") %>%
+    as.matrix()
+```
+
+
+```{r h_list, fig.width = 4, fig.asp = 1.618}
+h_list <- list()
+
+pc1_genes <- pca_loadings %>%
+    filter(cluster_id == "Isotype") %>%
+    arrange(desc(PC1)) %>%
+    .$gene
+select_cols <-
+    str_subset(colnames(scaled_norm_counts_mtx), "[a|d][:digit:].*Isotype")
+h_mtx <- scaled_norm_counts_mtx[pc1_genes, select_cols]
+# colnames(h_mtx) <- c(rep("WT", 5), rep("B2m KO", 5))
+
+col_fun <- viridis(70, option = "magma")
+col_fun <- c(rep(col_fun[1], 15), col_fun, rep(col_fun[length(col_fun)], 15))
+
+selected_genes <- c("Cd163", "Cxcl9", "Cxcl10")
+LINE_WIDTH <- 1
+ha <- rowAnnotation(
+    gene = anno_mark(
+        at = map_int(selected_genes, ~ which(pc1_genes == ..1)),
+        labels = selected_genes,
+        link_gp = gpar(lwd = LINE_WIDTH),
+        labels_gp = gpar(fontsize = TEXT_SIZE),
+        padding = unit(5, "mm")
+    )
+)
+
+Heatmap(
+    h_mtx,
+    column_title = "Isotype",
+    column_title_gp = gpar(fontsize = TEXT_SIZE),
+    col = col_fun,
+    name = "scaled norm counts",
+    cluster_rows = FALSE,
+    cluster_columns = FALSE,
+    column_names_gp = gpar(fontsize = TEXT_SIZE),
+    show_row_names = FALSE, 
+    right_annotation = ha
+)
+```
+
+## Split by genotype
+
+```{r}
+so <- AddMetaData(
+    so,
+    metadata = so@meta.data %>%
+        mutate(mouse_no_underscore = str_replace_all(mouse, "_", ".")) %>%
+        select(mouse_no_underscore)
+)
+out <- run_or_readRDS(file.path(results_dir, "pb_macs_split_genotype.rds"),
+                      function() {
+                          pb_list <-
+                              make_pseudobulk(so, "genotype", "mouse_no_underscore", "treatment")
+                          deseq_list <-
+                              map(pb_list,
+                                  ~ pb_to_deseq(..1, sample_var = "genotype", vars = "treatment"))
+                          rlog_list <- map(deseq_list, rlog, blind = TRUE)
+                          return(list(pb_list, deseq_list, rlog_list))
+                      })
+pb_list <- out[[1]]
+deseq_list <- out[[2]]
+rlog_list <- out[[3]]
+```
+
+```{r}
+plotPCA(rlog_list$`B2m KO`, ntop = 2321, intgroup = "treatment")
+```
+
+```{r}
+# dge_pb_b2m_cd40_vs_iso <- 
+#   results(deseq_list$`B2m KO`, contrast = c("treatment", "CD40 agonist", "Isotype")) %>% 
+#   as_tibble(rownames = "gene")
+# write_tsv(dge_pb_b2m_cd40_vs_iso, file.path(results_dir, "dge_pb_b2m_macs_cd40_vs_iso.tsv"))
+# 
+# ranked_list <- dge_pb_b2m_cd40_vs_iso %>% 
+#   arrange(desc(log2FoldChange)) %>% 
+#   {set_names(.$log2FoldChange, .$gene)}
+# ifng_gs_df <- msigdbr::msigdbr(species = "Mus musculus", category = "H") %>% 
+#   filter(gs_name == "HALLMARK_INTERFERON_GAMMA_RESPONSE")
+# gsea(values = ranked_list, 
+#      geneset = ifng_gs_df$gene_symbol, 
+#      power = 0)
+```
+
+
+# Pseudobulk all populations
+
+```{r}
+so_all <- readRDS(file.path(results_dir, "so_filterRNA200mito10.rds"))
+```
+
+```{r}
+metadata_df <- get_metadata_from_so(so_all)
+metadata_df$clusters %>% unique()
+```
+
+```{r}
+smallest_cell_count <- metadata_df %>%
+    group_by(mouse) %>%
+    summarise(count = n()) %>%
+    .$count %>% 
+    min()
+cells <- metadata_df %>%
+    group_by(mouse) %>%
+    slice_sample(n = smallest_cell_count) %>%
+    .$cell
+so_down <- subset(so_all, cells = cells)
+```
+
+```{r}
+so_down <- AddMetaData(
+    so_down,
+    metadata = so_down@meta.data %>%
+        mutate(mouse_no_underscore = str_replace_all(mouse, "_", ".")) %>%
+        select(mouse_no_underscore)
+)
+out <- run_or_readRDS(file.path(results_dir, "pb_ALL.rds"),
+                      function() {
+                          pb_list <-
+                              make_pseudobulk(so_down, "genotype", "mouse_no_underscore", "treatment")
+                          deseq_list <-
+                              map(pb_list,
+                                  ~ pb_to_deseq(..1, sample_var = "genotype", vars = "treatment"))
+                          rlog_list <- map(deseq_list, rlog, blind = TRUE)
+                          return(list(pb_list, deseq_list, rlog_list))
+                      })
+pb_list <- out[[1]]
+deseq_list <- out[[2]]
+rlog_list <- out[[3]]
+
+norm_counts <- purrr::map_dfr(
+    deseq_list,
+    ~counts(..1, normalized = TRUE) %>%
+      as_tibble(rownames = "gene"),
+    .id = "cluster"
+  ) %>%
+  pivot_longer(cols = 3:ncol(.),
+               names_to = "sample",
+               values_to = "norm_count") %>%
+  pivot_wider(id_cols = gene,
+              names_from = c(sample, cluster),
+              values_from = norm_count,
+              values_fill = 0)
+```
+
+```{r}
+get_pca_genes <- function(deseq_obj, ntop = 500) {
+  rv <- deseq_obj %>%
+    assay() %>%
+    rowVars()
+  select <- order(rv, decreasing = TRUE)[seq_len(min(ntop, length(rv)))]
+  pca <- prcomp(t(assay(deseq_obj)[select,]))
+  loadings <- as_tibble(pca$rotation, rownames = "gene")
+  return(loadings)
+}
+pca_loadings <- map(rlog_list, ~get_pca_genes(..1, ntop = dim(..1)[1])) %>%
+  imap(~mutate(..1, cluster_id = ..2)) %>%
+  purrr::reduce(bind_rows)
+```
+
+```{r}
+pca_list <- rlog_list %>% imap(~ {
+    DESeq2::plotPCA(..1, intgroup = "treatment", ntop = dim(..1)[1]) +
+        aes(shape = group) + 
+        scale_color_manual(values = palette_treatment) +
+        scale_x_continuous(expand = c(0.1, 0.1)) +
+        scale_y_continuous(expand = c(0.1, 0.1)) +
+        ggtitle(..2) +
+        theme(legend.key.height = unit(10, "pt"))
+})
+pca_list$Ctrl
+pca_list$`B2m KO`
+```
+
+## From here on, only B2m KO
+
+```{r}
+pca_loadings$cluster_id %>% unique()
+pca_loadings %>% 
+    filter(cluster_id == "B2m KO") %>% 
+    arrange(PC1)
+```
+
+### GSEA
+
+```{r}
+sig_dir <- here("data", "signatures")
+h_df <- read_tsv(file.path(sig_dir, "h_mouse.gmt"), col_names = FALSE) %>% 
+    pivot_longer(cols = 2:ncol(.)) %>% 
+    dplyr::select(-name) %>% 
+    drop_na(value) %>% 
+    dplyr::rename(gs_name = X1, gene = value)
+h_gs <- named_group_split(h_df, gs_name) %>% 
+    map(~.$gene)
+```
+
+```{r}
+ranked_cd40 <- results(deseq_list$`B2m KO`, contrast = c("treatment", "CD40 agonist", "Isotype")) %>%
+    as_tibble(rownames = "gene") %>%
+    mutate(signed_pval = ifelse(log2FoldChange > 0,-log10(pvalue), log10(pvalue))) %>%
+    arrange(desc(signed_pval)) %>%
+    {
+        set_names(.$signed_pval, .$gene)
+    }
+
+h_gsea_out <-
+    run_or_readRDS(file.path(results_dir, "gsea_pseudobulk_cd40.v.wt_H.rds"),
+                   function() {
+                       iterative.bulk.gsea(ranked_cd40,
+                                           set.list = h_gs,
+                                           power = 0)
+                   })
+```
+
+```{r}
+gsea(ranked_cd40,
+     geneset = h_gs$HALLMARK_INTERFERON_GAMMA_RESPONSE,
+     power = 0)
+```
+
+
+```{r, fig.width = 7, fig.height = 5}
+h_gsea_out %>% 
+    as_tibble(rownames = "gs_name") %>% 
+    arrange(desc(sscore)) %>% 
+    ggplot() +
+    aes(fct_reorder(gs_name, sscore), sscore) + 
+    geom_hline(yintercept = 0, linetype = "dotted", size = 0.2) + 
+    geom_point(aes(size = -log10(q.val), shape = q.val < 0.05)) + 
+    geom_segment(aes(xend = gs_name, yend = 0), size = 0.2) + 
+    geom_text(
+        aes(y = -0.1, label = gs_name),
+        hjust = 1,
+        size = 2,
+        data = ~ ..1 %>% filter(sscore > 0)
+    ) +
+    geom_text(
+        aes(y = 0.1, label = gs_name),
+        hjust = 0,
+        size = 2,
+        data = ~ ..1 %>% filter(sscore < 0)
+    ) + 
+    coord_flip() + 
+    scale_shape_manual(values = c(4, 19)) + 
+    scale_size(breaks = c(1, 2, 3)) + 
+    remove_spines() + 
+    theme(axis.title.y = element_blank(), 
+          axis.text.y = element_blank()) 
+```
+
+
+```{r, fig.width = 5, fig.height = 3}
+ifng_leg_df <- Rsc::get_leading_edge_df(ranked_cd40, gs_vec = h_gs$HALLMARK_INTERFERON_GAMMA_RESPONSE)
+leg_df <- Rsc::get_leading_edge_df(ranked_cd40, gs_vec = h_gs$HALLMARK_INTERFERON_GAMMA_RESPONSE)
+p_curve <- leg_df %>% 
+    # filter(str_detect(gs_name, "GAMMA")) %>% 
+    # mutate(gs_name = gs_name %>% str_extract(".*_") %>% str_sub(end = -2)) %>% 
+    ggplot() + 
+    aes(rank, running_es) + 
+    geom_hline(yintercept = 0, linetype = "dashed", size = 0.2) + 
+    geom_line() + 
+    # scale_y_continuous(limits = ~c(..1[1]*1.4, ..1[2])) + 
+    remove_x_spine() + 
+    theme(legend.position = c(0.5, 0.2), 
+          legend.background = element_blank(), 
+          legend.title = element_blank(), 
+          axis.text.x = element_blank(), 
+          axis.title.x = element_blank()) + 
+    labs(y = "Isotype <-- NES --> CD40", title = "Hallmark Ifng response")
+p_ticks <- leg_df %>% 
+    # filter(str_detect(gs_name, "GAMMA")) %>% 
+    # mutate(gs_name = gs_name %>% str_extract(".*_") %>% str_sub(end = -2)) %>% 
+    filter(in_gs) %>% 
+    ggplot() + 
+    aes(rank, 1) + 
+    geom_point(shape = "|", size = 3, alpha = 0.5) + 
+    remove_spines() + 
+    theme(axis.text.y = element_blank(), 
+          axis.title.y = element_blank(), 
+          legend.position = "none", 
+          plot.margin = margin())
+plot_grid(p_curve, p_ticks, ncol = 1, align = "v", axis = "lr", rel_heights = c(3, 1))
+```
+
+# Pseudobulk NK cells
+
+```{r}
+so <- readRDS(file.path(results_dir, "so_filterRNA200mito10_subsetTremovedoublets_subsetNKdropCD3.rds"))
+```
+
+```{r}
+smallest_cell_count <- metadata_df %>%
+    group_by(mouse) %>%
+    summarise(count = n()) %>%
+    .$count %>% 
+    min()
+cells <- metadata_df %>%
+    group_by(mouse) %>%
+    slice_sample(n = smallest_cell_count) %>%
+    .$cell
+so_down <- subset(so, cells = cells)
+```
+
+```{r}
+qc_sce2 <- function (sce_obj, sample_var, threshold = 1) 
+{
+    sample_names <- unique(sce_obj[[sample_var]]) %>% set_names()
+    n_cells <- as.numeric(table(sce_obj[[sample_var]]))
+    m <- base::match(sample_names, sce_obj[[sample_var]])
+    sample_level_metadata <- SummarizedExperiment::colData(sce_obj)[m, 
+        ] %>% data.frame(., n_cells, row.names = NULL)
+    sce_cell <- scater::perCellQCMetrics(sce_obj)
+    sce_obj$is_outlier <- scater::isOutlier(metric = sce_cell$total, 
+        nmads = 2, type = "both", log = TRUE)
+    sce_obj <- sce_obj[, !sce_obj$is_outlier]
+    sce_obj <- sce_obj[Matrix::rowSums(SingleCellExperiment::counts(sce_obj) > 
+        1) >= threshold, ]
+    return(sce_obj)
+}
+seurat_to_sce2 <- function (so, split_var = NULL, sample_var, vars) 
+{
+    seurat_counts <- so@assays$RNA@counts
+    seurat_metadata <- so@meta.data %>% dplyr::select(sample_var, 
+        vars)
+    if (is.null(split_var)) {
+        sce_obj <- SingleCellExperiment::SingleCellExperiment(assays = list(counts = seurat_counts), 
+            colData = seurat_metadata)
+        sce_obj <- qc_sce2(sce_obj, sample_var)
+        return(sce_obj)
+    }
+    else {
+        seurat_metadata <- so@meta.data %>% dplyr::select(vars, 
+            sample_var, split_var)
+        sce <- SingleCellExperiment::SingleCellExperiment(assays = list(counts = seurat_counts), 
+            colData = seurat_metadata)
+        sce_list <- unique(seurat_metadata[[split_var]]) %>% 
+            purrr::map(~base::subset(sce, , get(split_var) == 
+                ..1)) %>% set_names(unique(seurat_metadata[[split_var]]))
+        sce_list <- purrr::map(sce_list, qc_sce2, sample_var)
+        return(sce_list)
+    }
+}
+make_pseudobulk2 <- function (so, split_var = NULL, sample_var, vars) 
+{
+    sce <- seurat_to_sce2(so, split_var, sample_var, vars)
+    if (is.null(split_var)) {
+        groups <- SummarizedExperiment::colData(sce)[, c(sample_var, 
+            vars)]
+        pb <- Matrix.utils::aggregate.Matrix(Matrix::t(SingleCellExperiment::counts(sce)), 
+            groupings = groups, fun = "sum")
+        return(pb)
+    }
+    else {
+        groups <- map(sce, ~SummarizedExperiment::colData(..1)[, 
+            c(sample_var, vars)])
+        pb_list <- map2(sce, groups, ~Matrix.utils::aggregate.Matrix(Matrix::t(SingleCellExperiment::counts(..1)), 
+            groupings = ..2, fun = "sum")) %>% set_names(names(sce))
+        return(pb_list)
+    }
+}
+```
+
+
+```{r}
+so_down <- AddMetaData(
+    so_down,
+    metadata = so_down@meta.data %>%
+        mutate(mouse_no_underscore = str_replace_all(mouse, "_", ".")) %>%
+        select(mouse_no_underscore)
+)
+out <- run_or_readRDS(file.path(results_dir, "pb_NK.rds"),
+                      function() {
+                          pb_list <-
+                              make_pseudobulk2(so_down, "genotype", "mouse_no_underscore", "treatment")
+                          deseq_list <-
+                              map(pb_list,
+                                  ~ pb_to_deseq(..1, sample_var = "genotype", vars = "treatment"))
+                          rlog_list <- map(deseq_list, rlog, blind = TRUE)
+                          return(list(pb_list, deseq_list, rlog_list))
+                      })
+pb_list <- out[[1]]
+deseq_list <- out[[2]]
+rlog_list <- out[[3]]
+
+norm_counts <- purrr::map_dfr(
+    deseq_list,
+    ~counts(..1, normalized = TRUE) %>%
+      as_tibble(rownames = "gene"),
+    .id = "cluster"
+  ) %>%
+  pivot_longer(cols = 3:ncol(.),
+               names_to = "sample",
+               values_to = "norm_count") %>%
+  pivot_wider(id_cols = gene,
+              names_from = c(sample, cluster),
+              values_from = norm_count,
+              values_fill = 0)
+```
+
+```{r}
+get_pca_genes <- function(deseq_obj, ntop = 500) {
+  rv <- deseq_obj %>%
+    assay() %>%
+    rowVars()
+  select <- order(rv, decreasing = TRUE)[seq_len(min(ntop, length(rv)))]
+  pca <- prcomp(t(assay(deseq_obj)[select,]))
+  loadings <- as_tibble(pca$rotation, rownames = "gene")
+  return(loadings)
+}
+pca_loadings <- map(rlog_list, ~get_pca_genes(..1, ntop = dim(..1)[1])) %>%
+  imap(~mutate(..1, cluster_id = ..2)) %>%
+  purrr::reduce(bind_rows)
+```
+
+```{r, fig.width = 4, fig.height = 4}
+pca_list <- rlog_list %>% imap(~ {
+    DESeq2::plotPCA(..1, intgroup = "treatment", ntop = dim(..1)[1]) +
+        aes(shape = group) + 
+        scale_color_manual(values = palette_treatment) +
+        scale_x_continuous(expand = c(0.1, 0.1)) +
+        scale_y_continuous(expand = c(0.1, 0.1)) +
+        ggtitle(..2) +
+        theme(legend.key.height = unit(10, "pt"))
+})
+pca_list$Ctrl
+pca_list$`B2m KO`
+```
+
+
+# END 
+
+```{r}
+sessionInfo()
+```

@@ -1,0 +1,538 @@
+---
+title: Generating inflammatory monocyte signature
+execute: 
+  freeze: true
+  warning: false
+  message: false
+---
+
+```{r, message = FALSE}
+library(here)
+source(here("lib", "setup.R"))
+source(here("lib", "helper_Seurat.R"))
+source(here("lib", "helper.R"))
+source(here("lib", "aesthetics.R"))
+
+library(plotly)
+library(DT)
+library(GSVA)
+library(survminer)
+library(survival)
+```
+
+# Read in data
+
+Reading in the data with the myeloid subset and the full dataset (including tumor and stromal cells). 
+
+```{r}
+so_full <- readRDS(file.path(results_dir, "so_filterRNA200mito10.rds"))
+so_M <- readRDS(file.path(results_dir, "so_filterRNA200mito10_subsetMremovedoublets.rds"))
+```
+
+# Generating differential gene expression for signatures
+
+## Compare inflammatory and ctrl monocytes against other myeloid cells
+
+Using Seurat's `FindMarkers` function, compare inflammatory and ctrl monocytes against other myeloid cells. 
+
+```{r}
+dge_inflamm.v.myeloid <- run_or_readRDS(
+    file.path(results_dir, "dge_inflamm-monocytes.v.rest-myeloid.rds"), 
+    function() {
+        FindMarkers(so_M %>% set_idents("clusters_M"), 
+                    ident.1 = "7: inflammatory monocyte")
+    }
+)
+dge_inflamm.v.myeloid %>% 
+    as_tibble(rownames = "gene") %>% 
+    arrange(desc(avg_log2FC)) %>% 
+    write_tsv(file.path(results_dir, "dge_inflamm-monocytes.v.rest-myeloid.tsv"))
+
+dge_ccr2.v.myeloid <- run_or_readRDS(
+    file.path(results_dir, "dge_ccr2-monocytes.v.rest-myeloid.rds"), 
+    function() {
+        FindMarkers(so_M %>% set_idents("clusters_M"), 
+                    ident.1 = "1: Ccr2+ monocyte")
+    }
+)
+
+dge_ccr2.v.myeloid %>% 
+    as_tibble(rownames = "gene") %>% 
+    arrange(desc(avg_log2FC)) %>% 
+    write_tsv(file.path(results_dir, "dge_ccr2-monocytes.v.rest-myeloid.tsv"))
+```
+
+Compare the genes in the inflammatory v rest myeloid differential gene expression versus the ccr2 v rest myeloid differential gene expression
+
+```{r}
+plot_df <- bind_rows(
+    as_tibble(dge_inflamm.v.myeloid, rownames = "gene") %>% mutate(celltype = "inflamm"),
+    as_tibble(dge_ccr2.v.myeloid, rownames = "gene") %>% mutate(celltype = "ccr2")
+) %>%
+    filter(p_val_adj < 1e-4) %>%
+    pivot_wider(id_cols = gene,
+                names_from = celltype,
+                values_from = avg_log2FC) %>%
+    drop_na() %>%
+    mutate(direction = ifelse((inflamm * ccr2) < 0, "opposed", "agreed"))
+p <- plot_df %>%
+    ggplot() +
+    aes(inflamm, ccr2, label = gene) +
+    geom_point(size = 0.2) 
+p +
+    geom_text_repel(
+        data = ~ ..1 %>%
+            filter(direction == "opposed"),
+        max.overlaps = Inf, 
+        color = "blue"
+    ) +
+    coord_fixed()
+```
+
+## Compare inflammatory and ctrl monocytes against all cells
+
+```{r}
+cell_inflammatory_monocytes <- get_metadata_from_so(so_M) %>% 
+    filter(clusters_M == "7: inflammatory monocyte") %>% 
+    .$cell
+cell_ccr2_monocytes <- get_metadata_from_so(so_M) %>% 
+    filter(clusters_M == "1: Ccr2+ monocyte") %>% 
+    .$cell
+```
+
+```{r}
+metadata_to_add <- get_metadata_from_so(so_full, metadata = NULL, reduction = NULL) %>% 
+    mutate(labelled_monocytes = case_when(
+      cell %in% cell_inflammatory_monocytes ~ "inflammatory monocyte", 
+      cell %in% cell_ccr2_monocytes ~ "Ccr2+ monocyte"
+    )) %>% 
+    column_to_rownames("cell")
+so_full <- AddMetaData(so_full, metadata = metadata_to_add)
+
+dge_inflamm.v.all <- run_or_readRDS(
+    file.path(results_dir, "dge_inflamm-monocytes.v.rest-ALL.rds"), 
+    function() {
+        FindMarkers(so_full %>% set_idents("labelled_monocytes"), 
+                    ident.1 = "inflammatory monocyte")
+    }
+)
+dge_inflamm.v.all %>% 
+    as_tibble(rownames = "gene") %>% 
+    arrange(desc(avg_log2FC)) %>% 
+    write_tsv(file.path(results_dir, "dge_inflamm-monocytes.v.rest-ALL.tsv"))
+
+dge_ccr2.v.all <- run_or_readRDS(
+    file.path(results_dir, "dge_ccr2-monocytes.v.rest-ALL.rds"), 
+    function() {
+        FindMarkers(so_full %>% set_idents("labelled_monocytes"), 
+                    ident.1 = "Ccr2+ monocyte")
+    }
+)
+dge_ccr2.v.all %>% 
+    as_tibble(rownames = "gene") %>% 
+    arrange(desc(avg_log2FC)) %>% 
+    write_tsv(file.path(results_dir, "dge_ccr2-monocytes.v.rest-ALL.tsv"))
+
+```
+
+Compare the genes in the inflammatory v ALL myeloid differential gene expression versus the ccr2 v ALL myeloid differential gene expression
+
+```{r}
+plot_df <- bind_rows(
+    as_tibble(dge_inflamm.v.all, rownames = "gene") %>% mutate(celltype = "inflamm"),
+    as_tibble(dge_ccr2.v.all, rownames = "gene") %>% mutate(celltype = "ccr2")
+) %>%
+    filter(p_val_adj < 1e-4) %>%
+    pivot_wider(id_cols = gene,
+                names_from = celltype,
+                values_from = avg_log2FC) %>%
+    drop_na() %>%
+    mutate(direction = ifelse((inflamm * ccr2) < 0, "opposed", "agreed"))
+p <- plot_df %>%
+    ggplot() +
+    aes(inflamm, ccr2, label = gene) +
+    geom_point(size = 0.2) 
+p +
+    geom_text_repel(
+        data = ~ ..1 %>%
+            filter(direction == "opposed"),
+        max.overlaps = Inf, 
+        color = "blue"
+    ) +
+    coord_fixed()
+```
+
+## Compare inflammatory monocytes to other myeloid clusters (v myeloid)
+
+Update on 5/10/2023. Brian took a look at the analysis and was concerned that the Ccr2 monocytes are actually too similar to the inflammatory monocytes. Thus, in addition, we will look for the cluster 0 MDSC and the cluster 6 m2-like macs as well. 
+
+```{r}
+dge_MDSC.v.myeloid <- run_or_readRDS(
+    file.path(results_dir, "dge_MDSC.v.rest-myeloid.rds"), 
+    function() {
+        FindMarkers(so_M %>% set_idents("clusters_M"), 
+                    ident.1 = "0: MDSC")
+    }
+)
+dge_MDSC.v.myeloid %>% 
+    as_tibble(rownames = "gene") %>% 
+    arrange(desc(avg_log2FC)) %>% 
+    write_tsv(file.path(results_dir, "dge_MDSC.v.rest-myeloid.tsv"))
+
+
+dge_m2.v.myeloid <- run_or_readRDS(
+    file.path(results_dir, "dge_m2.v.rest-myeloid.rds"), 
+    function() {
+        FindMarkers(so_M %>% set_idents("clusters_M"), 
+                    ident.1 = "6: M2-like mac")
+    }
+)
+dge_m2.v.myeloid %>% 
+    as_tibble(rownames = "gene") %>% 
+    arrange(desc(avg_log2FC)) %>% 
+    write_tsv(file.path(results_dir, "dge_m2.v.rest-myeloid.tsv"))
+```
+
+Compare the genes in the inflammatory v rest myeloid differential gene expression versus the other myeloid clusters v rest differential gene expression
+
+```{r}
+plot_v_inflamm <- function(dge_df, dge_df_name = "") {
+    plot_df <- bind_rows(
+    as_tibble(dge_inflamm.v.myeloid, rownames = "gene") %>% mutate(celltype = "inflamm"),
+    as_tibble(dge_df, rownames = "gene") %>% mutate(celltype = dge_df_name)
+) %>%
+    filter(p_val_adj < 1e-4) %>%
+    pivot_wider(id_cols = gene,
+                names_from = celltype,
+                values_from = avg_log2FC) %>%
+    drop_na() %>%
+    mutate(direction = ifelse((inflamm * get(dge_df_name)) < 0, "opposed", "agreed"))
+p <- plot_df %>%
+    ggplot() +
+    aes(inflamm, get(dge_df_name), label = gene) +
+    geom_point(size = 0.2) + 
+    labs(x = "Inflamm. monocytes", y = dge_df_name)
+}
+```
+
+First the MDSCs. 
+
+```{r}
+p <- plot_v_inflamm(dge_MDSC.v.myeloid, "Cluster 0: MDSC")
+p #+
+    # geom_text_repel(
+    #     data = ~ ..1 %>%
+    #         filter(direction == "opposed") %>% 
+    #         slice_max(order_by = abs(inflamm) + abs(`Cluster 0: MDSC`), 
+    #                   n = 30),
+    #     max.overlaps = Inf, 
+    #     color = "blue"
+    # ) +
+    # labs(caption = "showing top 30 most differential") + 
+    # coord_fixed()
+```
+
+Now the M2 macs. 
+
+```{r}
+p <- plot_v_inflamm(dge_m2.v.myeloid, "Cluster 6: M2 macs")
+p #+
+    # geom_text_repel(
+    #     data = ~ ..1 %>%
+    #         filter(direction == "opposed") %>% 
+    #         slice_max(order_by = abs(inflamm) + abs(`Cluster 6: M2 macs`), 
+    #                   n = 30),
+    #     max.overlaps = Inf, 
+    #     color = "blue"
+    # ) +
+    # labs(caption = "showing top 30 most differential") + 
+    # coord_fixed()
+```
+
+## Compare inflammatory monocytes to other myeloid clusters (v all)
+
+Same analysis as above, but looking at cluster 0 and 6 against all other cells instead of myeloid cells
+
+```{r}
+cell_mdsc <- get_metadata_from_so(so_M) %>% 
+    filter(clusters_M == "0: MDSC") %>% 
+    .$cell
+cell_m2 <- get_metadata_from_so(so_M) %>% 
+    filter(clusters_M == "6: M2-like mac") %>% 
+    .$cell
+```
+
+
+```{r}
+metadata_to_add <- get_metadata_from_so(so_full, metadata = NULL, reduction = NULL) %>% 
+    mutate(labelled_monocytes = case_when(
+      cell %in% cell_inflammatory_monocytes ~ "inflammatory monocyte", 
+      cell %in% cell_ccr2_monocytes ~ "Ccr2+ monocyte", 
+      cell %in% cell_mdsc ~ "MDSC", 
+      cell %in% cell_m2 ~ "M2 macs"
+    )) %>% 
+    column_to_rownames("cell")
+so_full <- AddMetaData(so_full, metadata = metadata_to_add)
+
+dge_mdsc.v.all <- run_or_readRDS(
+    file.path(results_dir, "dge_mdsc.v.rest-ALL.rds"), 
+    function() {
+        FindMarkers(so_full %>% set_idents("labelled_monocytes"), 
+                    ident.1 = "MDSC")
+    }
+)
+dge_mdsc.v.all %>% 
+    as_tibble(rownames = "gene") %>% 
+    arrange(desc(avg_log2FC)) %>% 
+    write_tsv(file.path(results_dir, "dge_mdsc.v.rest-ALL.tsv"))
+
+dge_m2.v.all <- run_or_readRDS(
+    file.path(results_dir, "dge_m2.v.rest-ALL.rds"), 
+    function() {
+        FindMarkers(so_full %>% set_idents("labelled_monocytes"), 
+                    ident.1 = "M2 macs")
+    }
+)
+dge_m2.v.all %>% 
+    as_tibble(rownames = "gene") %>% 
+    arrange(desc(avg_log2FC)) %>% 
+    write_tsv(file.path(results_dir, "dge_m2.v.rest-ALL.tsv"))
+
+```
+
+Compare the genes in the inflammatory v rest myeloid differential gene expression versus the ccr2 v rest myeloid differential gene expression
+
+```{r, eval = F}
+plot_v_inflamm_ALL <- function(dge_df, dge_df_name = "") {
+    plot_df <- bind_rows(
+    as_tibble(dge_inflamm.v.all, rownames = "gene") %>% mutate(celltype = "inflamm"),
+    as_tibble(dge_df, rownames = "gene") %>% mutate(celltype = dge_df_name)
+) %>%
+    filter(p_val_adj < 1e-4) %>%
+    pivot_wider(id_cols = gene,
+                names_from = celltype,
+                values_from = avg_log2FC) %>%
+    drop_na() %>%
+    mutate(direction = ifelse((inflamm * get(dge_df_name)) < 0, "opposed", "agreed"))
+p <- plot_df %>%
+    ggplot() +
+    aes(inflamm, get(dge_df_name), label = gene) +
+    geom_point(size = 0.2) + 
+    labs(x = "Inflamm. monocytes", y = dge_df_name)
+}
+```
+
+First the MDSCs. 
+
+```{r, eval = F}
+p <- plot_v_inflamm_ALL(dge_mdsc.v.all, "Cluster 0: MDSC")
+p +
+    geom_text_repel(
+        data = ~ ..1 %>%
+            filter(direction == "opposed") %>% 
+            slice_max(order_by = abs(inflamm) + abs(`Cluster 0: MDSC`), 
+                      n = 30),
+        max.overlaps = Inf, 
+        color = "blue"
+    ) +
+    labs(caption = "showing top 30 most differential") + 
+    coord_fixed()
+```
+
+Now the M2 macs. 
+
+```{r, eval = F}
+p <- plot_v_inflamm_ALL(dge_m2.v.all, "Cluster 6: M2 macs")
+p +
+    geom_text_repel(
+        data = ~ ..1 %>%
+            filter(direction == "opposed") %>% 
+            slice_max(order_by = abs(inflamm) + abs(`Cluster 6: M2 macs`), 
+                      n = 30),
+        max.overlaps = Inf, 
+        color = "blue"
+    ) +
+    labs(caption = "showing top 30 most differential") + 
+    coord_fixed()
+```
+
+# Assessing DGE properties and quality
+
+## compare v myeloid versus v all
+
+Versus all and versus myeloid are honestly not that different. 
+
+```{r}
+plot_df <- bind_rows(
+    dge_inflamm.v.all %>% as_tibble(rownames = "gene") %>% mutate(dge = "inflamm.v.all"),
+    dge_inflamm.v.myeloid %>% as_tibble(rownames = "gene") %>% mutate(dge = "inflamm.v.myeloid")
+) %>% 
+    filter(p_val_adj < 0.0001) %>% 
+    pivot_wider(id_cols = gene, 
+                names_from = dge, 
+                values_from = avg_log2FC) 
+p <- plot_df %>% 
+    ggplot() + 
+    aes(inflamm.v.all, inflamm.v.myeloid, label = gene) + 
+    geom_point(size = 0.5)
+p + 
+    geom_text_repel(data = ~..1 %>% filter(inflamm.v.all*inflamm.v.myeloid<0))
+```
+
+
+```{r}
+plot_df <- bind_rows(
+    dge_ccr2.v.all %>% as_tibble(rownames = "gene") %>% mutate(dge = "ccr2.v.all"),
+    dge_ccr2.v.myeloid %>% as_tibble(rownames = "gene") %>% mutate(dge = "ccr2.v.myeloid")
+) %>% 
+    filter(p_val_adj < 0.0001) %>% 
+    pivot_wider(id_cols = gene, 
+                names_from = dge, 
+                values_from = avg_log2FC) 
+p <- plot_df %>% 
+    ggplot() + 
+    aes(ccr2.v.all, ccr2.v.myeloid, label = gene) + 
+    geom_point(size = 0.5)
+p + 
+    geom_text_repel(data = ~..1 %>% filter(ccr2.v.all*ccr2.v.myeloid<0))
+```
+
+# Create signatures from DGE
+
+## Signatures by top genes
+
+Let's grab those differential gene expression lists that we just derived. 
+
+```{r}
+dge_ccr2 <- readRDS(file.path(results_dir, "dge_ccr2-monocytes.v.rest-ALL.rds"))
+dge_inflamm <- readRDS(file.path(results_dir, "dge_inflamm-monocytes.v.rest-ALL.rds"))
+dge_m2 <- readRDS(file.path(results_dir, "dge_m2.v.rest-ALL.rds"))
+dge_mdsc <- readRDS(file.path(results_dir, "dge_mdsc.v.rest-ALL.rds"))
+dge_list <- list(
+    Ccr2_monocytes_vs_rest = dge_ccr2, 
+    Inflammatory_monocytes_vs_rest = dge_inflamm, 
+    M2_macs_vs_rest = dge_m2, 
+    MDSC_vs_rest = dge_mdsc
+)
+```
+
+Define a couple helper functions to pull signatures from the differential gene expression lists. 
+
+```{r}
+get_signature_df <- function(dge, gs_name_str, ngenes) {
+    dge %>%
+        as_tibble(rownames = "gene") %>%
+        filter(p_val_adj < 0.001) %>%
+        slice_max(order_by = avg_log2FC, n = ngenes) %>%
+        mutate(gs_name = gs_name_str) %>%
+        dplyr::select(gs_name, gene)
+}
+
+get_gs_from_dge_list <- function(ngenes) {
+    dge_list %>%
+        imap_dfr( ~ get_signature_df(..1, ..2, ngenes)) %>%
+        named_group_split(gs_name) %>%
+        map( ~ ..1$gene)
+}
+```
+
+Get gene set signatures from the DGE lists and save in `r here("data", "signatures")`. 
+
+```{r}
+gs_list <- map(set_names(seq(20, 200, 20)), get_gs_from_dge_list)
+# gs_list$`20`
+
+saveRDS(gs_list, file.path(results_dir, "myeloid_scRNA_signatures_20.200.rds"))
+```
+
+
+## Monocyte signatures by top unique genes
+
+In order to pull apart the inflammatory monocytes and the Ccr2 monocytes, it may make more sense to generate signatures by the top unique genes instead of simply the top genes, which contain a fair degree of overlap. So let's try that. 
+
+```{r}
+dge_ccr2 <- readRDS(file.path(results_dir, "dge_ccr2-monocytes.v.rest-ALL.rds")) %>% 
+    as_tibble(rownames = "gene")
+dge_inflamm <- readRDS(file.path(results_dir, "dge_inflamm-monocytes.v.rest-ALL.rds")) %>% 
+    as_tibble(rownames = "gene")
+```
+
+```{r}
+monocyte_specific_gs_list <- 
+    left_join(dge_ccr2, dge_inflamm, by = "gene", suffix = c(".Ccr2", ".Inflamm")) %>% 
+    filter(p_val_adj.Ccr2 < 0.0001 & p_val_adj.Inflamm < 0.0001) %>% 
+    mutate(direction = case_when(
+        avg_log2FC.Ccr2 * avg_log2FC.Inflamm > 0 ~ "same", 
+        avg_log2FC.Inflamm > 0 ~ "Inflamm", 
+        avg_log2FC.Ccr2 > 0 ~ "Ccr2", 
+    )) %>% 
+    named_group_split(direction) %>% 
+    map(~.$gene)
+saveRDS(monocyte_specific_gs_list, file.path(results_dir, "myeloid_scRNA_signatures_Ccr2_and_inflammatory_monocyte_specific_genes.rds"))
+```
+
+There are 9 Ccr2-monocyte specific genes. 
+
+```{r}
+monocyte_specific_gs_list$Ccr2
+```
+
+There are 31 inflammatory monocyte specific genes. 
+
+```{r}
+monocyte_specific_gs_list$Inflamm
+```
+
+### GO term enrichment of specific signatures
+
+```{r}
+library(clusterProfiler)
+library(org.Mm.eg.db)
+go_inflamm_out <- run_or_readRDS(
+    file.path(results_dir, "GO_inflamm.monocyte.specific.rds"), 
+    function() {
+        gene_conversion <- bitr(monocyte_specific_gs_list$Inflamm, fromType="SYMBOL", toType="ENTREZID", OrgDb="org.Mm.eg.db")
+        go_inflamm_out <- enrichGO(
+            gene_conversion$ENTREZID,
+            OrgDb = org.Mm.eg.db,
+            keyType = "ENTREZID",
+            ont = "BP"
+        )
+    }
+)
+```
+
+```{r}
+go_ccr2_out <- run_or_readRDS(
+    file.path(results_dir, "GO_ccr2.monocyte.specific.rds"), 
+    function() {
+        gene_conversion <- bitr(monocyte_specific_gs_list$Ccr2, fromType="SYMBOL", toType="ENTREZID", OrgDb="org.Mm.eg.db")
+        go_inflamm_out <- enrichGO(
+            gene_conversion$ENTREZID,
+            OrgDb = org.Mm.eg.db,
+            keyType = "ENTREZID",
+            ont = "BP"
+        )
+    }
+)
+
+
+```
+
+
+```{r}
+go_same_out <- run_or_readRDS(
+    file.path(results_dir, "GO_Ccr2.inflamm.monocyte.same.rds"), 
+    function() {
+        gene_conversion <- bitr(monocyte_specific_gs_list$same, fromType="SYMBOL", toType="ENTREZID", OrgDb="org.Mm.eg.db")
+        go_inflamm_out <- enrichGO(
+            gene_conversion$ENTREZID,
+            OrgDb = org.Mm.eg.db,
+            keyType = "ENTREZID",
+            ont = "BP"
+        )
+    }
+)
+```
+
+

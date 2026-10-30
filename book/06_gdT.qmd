@@ -1,0 +1,153 @@
+---
+title: "gdT"
+execute: 
+  freeze: true
+  message: false
+  warning: false
+---
+
+```{r setup, include=FALSE}
+library(here)
+source(here("lib", "setup.R"))
+source(here("lib", "helper_Seurat.R"))
+source(here("lib", "helper.R"))
+source(here("lib", "aesthetics.R"))
+
+clust_pal_list <- readxl::read_excel(file.path(results_dir, "cluster_annotations.xlsx")) %>% 
+    tidyr::fill(Subset, clustering) %>% 
+    named_group_split(Subset, clustering) %>% 
+    set_names(c("M", "Twdoublets", "T", "full", "Mwdoublets")) %>% 
+    imap(~set_names(..1$color, paste0(..1$cluster, ": ", ..1$cluster_ID)))
+```
+
+# Read in Seurat objects
+
+```{r}
+so_T <- readRDS(file.path(results_dir, "so_filterRNA200mito10_subsetTremovedoublets.rds"))
+```
+
+# Trdc expression
+
+```{r}
+get_metadata_from_so(so_T, genes = "Trdc") %>% 
+    plot_umap(color_str = "Trdc", pointsize = 2.4, pixels = c(1024, 1024))
+```
+
+```{r}
+get_metadata_from_so(so_T, genes = "Trdc") %>%
+    group_by(mouse, genotype, treatment, clusters_T) %>%
+    ggplot() +
+    aes(Trdc) +
+    geom_histogram() +
+    facet_wrap( ~ clusters_T) +
+    scale_y_log10()
+```
+
+```{r}
+trdc_T_cells <- get_metadata_from_so(so_T, genes = "Trdc") %>% 
+    filter(!str_detect(clusters_T, "NK")) %>% 
+    filter(Trdc > 0) %>% 
+    .$cell
+print(length(trdc_T_cells))
+print(nrow(get_metadata_from_so(so_T)))
+print(length(trdc_T_cells) / nrow(get_metadata_from_so(so_T)))
+```
+
+# Subset gdT cells
+
+```{r}
+so_gdT <- subset(so_T, cells = trdc_T_cells)
+```
+
+```{r}
+so_gdT <- run_seurat_rna_workflow(so_gdT)
+```
+
+```{r}
+for (res in seq(0.2, 0.8, 0.1)) {
+    so_gdT <- FindClusters(so_gdT, resolution = res)
+}
+```
+
+# Clustering
+
+```{r, fig.asp = 1, fig.width = 7}
+clustree::clustree(so_gdT, prefix = "RNA_snn_res.")
+```
+
+```{r, fig.asp = 1, fig.width = 7}
+get_metadata_from_so(so_gdT) %>% 
+    dplyr::select(cell, UMAP_1, UMAP_2, all_of(str_subset(colnames(.), "RNA_snn_res."))) %>% 
+    pivot_longer(cols = all_of(str_subset(colnames(.), "RNA_snn_res.")), 
+                 names_to = "clustering", 
+                 values_to = "cluster") %>% 
+    plot_umap(color_str = "cluster", pointsize = 3.1, 
+              label = TRUE, label_groups = "clustering") + 
+    facet_wrap(~clustering, ncol = 3)
+```
+
+# Identify differential markers 
+
+```{r}
+markers05_df <- run_or_readRDS(
+    file.path(
+        results_dir, 
+        "so_filterRNA200mito10_subsetTremovedoublets_subsetgdT_markers05.rds"
+    ), 
+    function() {FindAllMarkers(so_gdT %>% set_idents("RNA_snn_res.0.5"))}
+)
+write_csv(markers05_df, file.path(results_dir, "so_filterRNA200mito10_subsetTremovedoublets_markers05.csv"))
+```
+
+```{r}
+get_metadata_from_so(so_gdT) %>% 
+    plot_umap(color_str = "group", pointsize = 5.1) + 
+    facet_wrap(~group)
+```
+
+
+# Plot markers
+
+```{r, fig.asp = 1, fig.width = 7}
+genes <- c("Cd3e", "Trdc", "Cd4", "Cd8a", "Trac", "Klrk1", "Mki67", "Prf1", "Gzmb")
+get_metadata_from_so(so_gdT, genes = genes) %>% 
+    dplyr::select(cell, UMAP_1, UMAP_2, genes) %>% 
+    pivot_longer(cols = genes, 
+                 names_to = "genes", 
+                 values_to = "expr") %>% 
+    plot_umap(color_str = "expr", pointsize = 10.9, pixels = c(1024, 1024)) + 
+    facet_wrap(~genes, ncol = 3)
+```
+
+```{r}
+genes <- c("Cd3e", "Trdc", "Cd4", "Cd8a", "Trac", "Klrk1", "Prf1", "Gzmb")
+get_metadata_from_so(so_gdT, genes = genes) %>% 
+    filter(RNA_snn_res.0.5 %in% c("0", "3")) %>%
+    pivot_longer(cols = genes, 
+                 names_to = "genes", 
+                 values_to = "expr") %>% 
+    ggplot() + 
+    aes(group, expr)  + 
+    geom_violin(aes(fill = group), color = NA) +
+    geom_jitter(size = 0.5, width = 0.2) + 
+    facet_wrap(~genes, ncol = 4) + 
+    stat_compare_means(comparisons = list(c("Ctrl__CD40 agonist", "Ctrl__Isotype"), 
+                                          c("B2m KO__CD40 agonist", 
+                                            "B2m KO__Isotype"))) + 
+    scale_y_continuous(expand = c(0, 0), limits = ~c(..1[[1]], ..1[[2]]*1.3)) + 
+    theme(axis.text.x = element_text(angle = 45, hjust = 1)) + 
+    labs(caption = "Only res 0.5 clusters 0 and 3")
+```
+
+# END
+
+```{r save, eval = F}
+so_gdT <- readRDS(file.path(results_dir, "so_filterRNA200mito10_subsetTremovedoublets_subsetgdT.rds"))
+saveRDS(so_gdT, file.path(results_dir, "so_filterRNA200mito10_subsetTremovedoublets_subsetgdT.rds"))
+```
+
+
+```{r}
+sessionInfo()
+```
+

@@ -1,0 +1,20 @@
+{
+  "hash": "55fd11348ecaff4d09299a2cc28cbe1e",
+  "result": {
+    "markdown": "---\nexecute: \n  freeze: true\n  message: false\n  warning: false\n---\n\n::: {.cell}\n\n:::\n\n::: {.cell}\n\n:::\n\n\n\n## Score M\n\n\n\n::: {.cell}\n\n:::\n\n\n\n# Score T/NK\n\n\n\n::: {.cell}\n\n:::\n\n\n\n# Score all\n\n\n\n::: {.cell}\n\n:::\n",
+    "supporting": [
+      "08_run_vision_files"
+    ],
+    "filters": [
+      "rmarkdown/pagebreak.lua"
+    ],
+    "includes": {},
+    "engineDependencies": {
+      "knitr": [
+        "{\"type\":\"list\",\"attributes\":{},\"value\":[]}"
+      ]
+    },
+    "preserve": null,
+    "postProcess": false
+  }
+}

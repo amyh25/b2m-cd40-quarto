@@ -1,0 +1,482 @@
+---
+title: "Full TCGA analysis"
+execute: 
+  freeze: auto
+  message: false
+  warning: false
+---
+
+```{r}
+library(here)
+source(here("lib", "setup.R"))
+source(here("lib", "helper_Seurat.R"))
+source(here("lib", "helper.R"))
+source(here("lib", "aesthetics.R"))
+
+library(plotly)
+library(DT)
+library(GSVA)
+library(survminer)
+library(survival)
+library(ggridges)
+```
+
+# Read in data and setup
+
+Let's get the signatures that we want. If you want the details about how they were developed, see the notebook `12_inflammatory monocytes_v_rest.Rmd`. 
+
+```{r}
+gs_list_mouse <- readRDS(file.path(results_dir, "myeloid_scRNA_signatures_20.200.rds"))$`200`
+```
+
+I'll show them again here though. 
+
+```{r}
+gs_list_mouse[c("Inflammatory_monocytes_vs_rest", "M2_macs_vs_rest")]
+```
+
+We'll also want to save these lists of genes in a nice table somewhere, so let's do that here. 
+
+```{r}
+signature_df <- gs_list_mouse[c("Inflammatory_monocytes_vs_rest", "M2_macs_vs_rest")] %>% 
+  reduce(bind_cols) 
+colnames(signature_df) <- c("Inflammatory_monocytes_vs_rest", "M2_macs_vs_rest")
+write_tsv(signature_df, file.path(results_dir, "inflamm_monocyte_signature.tsv"))
+```
+
+We'll also need to be converting back and forth from mouse and human genes. We'll use this dataframe that I generated from biomaRt previously to do so. 
+
+```{r}
+mouse_human_genes <- readRDS(here("data", "signatures", "mouse_human_genes.rds"))
+human_mouse_key <- set_names(mouse_human_genes$MGI.symbol, mouse_human_genes$HGNC.symbol)
+mouse_human_key <- set_names(mouse_human_genes$HGNC.symbol, mouse_human_genes$MGI.symbol)
+```
+
+## Get TCGA data
+
+I've downloaded all the TCGA from cBioPortal and extracted the `data_mrna_seq_v2_rsem.txt` files for every study. Let's read those in. 
+
+```{r}
+tcga_rna_list <- readRDS(here("data", "TCGA_pan_can_atlas_2018", "tcga_mega_rna_list.rds"))
+tcga_clin_df <- read_tsv(here("data", "TCGA_pan_can_atlas_2018", "tcga_mega_clinical_patient.txt"))
+tcga_sample_df <- read_tsv(here("data", "TCGA_pan_can_atlas_2018", "tcga_mega_clinical_sample.txt"))
+
+patient_sample_key <- tcga_sample_df %>% 
+    select(PATIENT_ID, SAMPLE_ID)
+tcga_clin_df <- tcga_clin_df %>% 
+    left_join(patient_sample_key)
+```
+
+Given that the monocyte signature is mouse-derived, I think it makes sense to restrict the genes considered to the human homologs of genes which were detected in the single cell analysis. We can pull those from the Seurat object. 
+
+```{r}
+so_full <- readRDS(file.path(results_dir, "so_filterRNA200mito10.rds"))
+human_genes <- mouse_human_key[rownames(so_full)][!is.na(mouse_human_key[rownames(so_full)])]
+human_genes <- unname(human_genes)
+length(human_genes)
+```
+
+Looks like we've got about 18,456 genes to consider. 
+
+# Run ssGSEA
+
+```{r}
+mutate_split_by_median <- function(.df, var_str, na.rm = FALSE) {
+    .df %>% 
+        mutate(split_by_median = ifelse(get(var_str) >= median(get(var_str), na.rm = na.rm), 
+                                        "above/equal to median", 
+                                        "below median"))
+}
+
+mutate_split_by_quartiles <- function(.df, var_str, na.rm = FALSE) {
+    .df %>%
+        mutate(
+            split_by_quartiles = case_when(
+                get(var_str) > quantile(get(var_str), 0.75, na.rm = na.rm) ~ ">Q3",
+                get(var_str) > quantile(get(var_str), 0.5, na.rm = na.rm) ~ "Q2-Q3",
+                get(var_str) > quantile(get(var_str), 0.25, na.rm = na.rm) ~ "Q1-Q2",
+                TRUE ~ "<Q1"
+                
+            )
+        ) %>% 
+        mutate(split_by_quartiles = factor(split_by_quartiles, levels = c("<Q1", "Q1-Q2", "Q2-Q3", ">Q3")))
+}
+```
+
+```{r, results = 'hide', message = FALSE}
+gsva_res <-
+    run_or_readRDS(file.path(results_dir, "ssGSEA_all.TCGA_myeloid_signatures.rds"),
+                   function() {
+                       gsva_out <- tcga_rna_list %>%
+                           map_dfr( ~ {
+                               new_df <- ..1 %>%
+                                   filter(Hugo_Symbol %in% human_genes) %>%
+                                   mutate(mouse_gene = human_mouse_key[Hugo_Symbol]) %>%
+                                   dplyr::relocate(mouse_gene, .after = Hugo_Symbol) %>%
+                                   dplyr::select(-Entrez_Gene_Id,-Hugo_Symbol) %>%
+                                   group_by(mouse_gene) %>% 
+                                   summarise_all(sum) %>% 
+                                   column_to_rownames("mouse_gene") %>% 
+                                   as.matrix()
+                               gsva(
+                                   new_df,
+                                   gset.idx.list = gs_list_mouse,
+                                   method = "ssgsea",
+                                   kcdf = "Gaussian",
+                                   min.sz = 3
+                               ) %>%
+                                   as_tibble(rownames = "gs_name") %>%
+                                   pivot_longer(
+                                       cols = 2:ncol(.),
+                                       names_to = "sample",
+                                       values_to = "score"
+                                   )
+                           }, .id = "tumor_type")
+                       
+                       gsva_wide <- gsva_out %>%
+                           group_by(gs_name) %>%
+                           mutate(scaled_score = as.vector(scale(score))) %>%
+                           ungroup() %>%
+                           pivot_wider(
+                               id_cols = c(tumor_type, sample),
+                               names_from = gs_name,
+                               values_from = c(score, scaled_score)
+                           )
+                       
+                       return(gsva_wide)
+                   })
+```
+
+```{r}
+gsva_res_w_metadata <- gsva_res %>%
+  left_join(tcga_clin_df, by = c("sample" = "SAMPLE_ID")) %>%
+  filter(!is.na(OS_STATUS)) %>%
+  mutate(OS_MONTHS = as.numeric(OS_MONTHS)) %>%
+  mutate(OS_STATUS = as.integer(str_extract(OS_STATUS, "."))) %>%
+  group_by(tumor_type) %>%
+  mutate(inflamm_minus_m2 = scaled_score_Inflammatory_monocytes_vs_rest - scaled_score_M2_macs_vs_rest) %>%
+  mutate(inflamm_minus_m2_scaled = as.vector(scale(inflamm_minus_m2))) %>%
+  mutate(tumor_type_abbr = str_extract(tumor_type, "^.*_tcga") %>% str_sub(end = -6)) %>%
+  drop_na(score_Inflammatory_monocytes_vs_rest)
+```
+
+```{r}
+gsva_res_w_metadata %>% 
+    ggplot() + 
+    aes(x = score_Inflammatory_monocytes_vs_rest, y = tumor_type_abbr, 
+        height = ..density..) + 
+    geom_density_ridges(stat = "density")
+
+gsva_res_w_metadata %>% 
+    ggplot() + 
+    aes(x = score_M2_macs_vs_rest, y = tumor_type_abbr, 
+        height = ..density..) + 
+    geom_density_ridges(stat = "density")
+
+gsva_res_w_metadata %>% 
+    ggplot() + 
+    aes(x = inflamm_minus_m2, y = tumor_type_abbr, 
+        height = ..density..) + 
+    geom_density_ridges(stat = "density")
+```
+
+```{r}
+survfit_inflamm_monocytes_list <- list()
+survfit_m2_list <- list()
+survfit_inflamm_vs_m2_list <- list()
+coxph_inflamm_monocytes_list <- list()
+coxph_m2_list <- list()
+coxph_inflamm_vs_m2_list <- list()
+
+for (tumor_type_str in unique(gsva_res_w_metadata$tumor_type)) {
+  # print(tumor_type_str)
+  
+  if (nrow(gsva_res_w_metadata %>% filter(tumor_type == tumor_type_str)) == 0) {
+    NULL
+  } else {
+    survfit_inflamm_monocytes_list[[tumor_type_str]] <- survfit(
+      Surv(OS_MONTHS, OS_STATUS) ~ split_by_median,
+      data = gsva_res_w_metadata %>%
+        filter(tumor_type == tumor_type_str) %>%
+        mutate_split_by_quartiles("score_Inflammatory_monocytes_vs_rest", na.rm = T) %>%
+        mutate_split_by_median("score_Inflammatory_monocytes_vs_rest")
+    )
+    
+    survfit_m2_list[[tumor_type_str]] <- survfit(
+      Surv(OS_MONTHS, OS_STATUS) ~ split_by_median,
+      data = gsva_res_w_metadata %>%
+        filter(tumor_type == tumor_type_str) %>%
+        mutate_split_by_quartiles("score_M2_macs_vs_rest", na.rm = T) %>%
+        mutate_split_by_median("score_M2_macs_vs_rest")
+    )
+    
+    survfit_inflamm_vs_m2_list[[tumor_type_str]] <- survfit(
+      Surv(OS_MONTHS, OS_STATUS) ~ split_by_median,
+      data = gsva_res_w_metadata %>%
+        filter(tumor_type == tumor_type_str) %>%
+        mutate_split_by_quartiles("inflamm_minus_m2", na.rm = T) %>%
+        mutate_split_by_median("inflamm_minus_m2")
+    )
+    
+    coxph_inflamm_monocytes_list[[tumor_type_str]] <- coxph(
+      Surv(OS_MONTHS, OS_STATUS) ~ scaled_score_Inflammatory_monocytes_vs_rest,
+      data = gsva_res_w_metadata %>%
+        filter(tumor_type == tumor_type_str)
+    )
+    
+    coxph_m2_list[[tumor_type_str]] <- coxph(
+      Surv(OS_MONTHS, OS_STATUS) ~ scaled_score_M2_macs_vs_rest,
+      data = gsva_res_w_metadata %>%
+        filter(tumor_type == tumor_type_str)
+    )
+    
+    coxph_inflamm_vs_m2_list[[tumor_type_str]] <- coxph(
+      Surv(OS_MONTHS, OS_STATUS) ~ inflamm_minus_m2_scaled,
+      data = gsva_res_w_metadata %>%
+        filter(tumor_type == tumor_type_str)
+    )
+  }
+  
+}
+coxph_inflamm_monocytes_df <-
+  coxph_inflamm_monocytes_list %>% map_dfr(
+    broom::tidy,
+    conf.int = TRUE,
+    exponentiate = TRUE,
+    .id = "name"
+  )
+coxph_m2_df <-
+  coxph_m2_list %>% map_dfr(
+    broom::tidy,
+    conf.int = TRUE,
+    exponentiate = TRUE,
+    .id = "name"
+  )
+coxph_inflamm_vs_m2_df <-
+  coxph_inflamm_vs_m2_list %>% map_dfr(
+    broom::tidy,
+    conf.int = TRUE,
+    exponentiate = TRUE,
+    .id = "name"
+  )
+```
+
+CoxPH of all TCGA with the inflamm monocyte signature. 
+
+```{r, fig.width = 7, fig.height = 5}
+count_df <- gsva_res_w_metadata %>%
+    group_by(tumor_type_abbr) %>%
+    summarise(n = n())
+coxph_inflamm_monocytes_df %>%
+    mutate(name = str_extract(name, "^.*_tcga") %>% str_sub(end = -6)) %>%
+    left_join(count_df, by = c("name" = "tumor_type_abbr")) %>%
+    mutate(name = paste0(name, " (n=", n, ")")) %>%
+    ggplot() +
+    aes(name, estimate, color = p.value < 0.05) +
+    geom_point(shape = "square", size = 4) +
+    geom_errorbar(aes(ymin = conf.low, ymax = conf.high),
+                  width = 0.2) +
+    geom_hline(yintercept = 1, linetype = "dashed") +
+    geom_text(
+        aes(y = Inf, label = sprintf("p=%s", format(p.value, digits = 1))),
+        hjust = 1.1,
+        vjust = 0,
+        size = 2
+    ) +
+    geom_text(
+        aes(y = Inf,
+            label = sprintf(
+                "(%s -- %s)",
+                format(conf.low, digits = 1, scientific = F),
+                format(conf.high, digits = 1, scientific = F)
+            )),
+        size = 1.5,
+        hjust = 1.1,
+        vjust = 1.5
+    )+
+    labs(x = "", y = "Hazard Ratio") +
+    coord_flip()  +
+    scale_y_log10(expand = expansion(0.2)) +
+    scale_color_manual(values = c("grey", "black")) +
+    theme(
+        axis.line.y = element_blank(),
+        axis.ticks.y = element_blank(),
+        legend.position = "none"
+    )
+```
+
+
+CoxPH of all TCGA with the m2 signature. 
+
+```{r, fig.width = 7, fig.height = 5}
+count_df <- gsva_res_w_metadata %>%
+    group_by(tumor_type_abbr) %>%
+    summarise(n = n())
+coxph_m2_df %>%
+    mutate(name = str_extract(name, "^.*_tcga") %>% str_sub(end = -6)) %>%
+    left_join(count_df, by = c("name" = "tumor_type_abbr")) %>%
+    mutate(name = paste0(name, " (n=", n, ")")) %>%
+    ggplot() +
+    aes(name, estimate, color = p.value < 0.05) +
+    geom_point(shape = "square", size = 4) +
+    geom_errorbar(aes(ymin = conf.low, ymax = conf.high),
+                  width = 0.2) +
+    geom_hline(yintercept = 1, linetype = "dashed") +
+    geom_text(
+        aes(y = Inf, label = sprintf("p=%s", format(p.value, digits = 1))),
+        hjust = 1.1,
+        vjust = 0,
+        size = 2
+    ) +
+    geom_text(
+        aes(y = Inf,
+            label = sprintf(
+                "(%s -- %s)",
+                format(conf.low, digits = 1, scientific = F),
+                format(conf.high, digits = 1, scientific = F)
+            )),
+        size = 1.5,
+        hjust = 1.1,
+        vjust = 1.5
+    )+
+    labs(x = "", y = "Hazard Ratio") +
+    coord_flip()  +
+    scale_y_log10(expand = expansion(0.2)) +
+    scale_color_manual(values = c("grey", "black")) +
+    theme(
+        axis.line.y = element_blank(),
+        axis.ticks.y = element_blank(),
+        legend.position = "none"
+    )
+```
+
+CoxPH of all TCGA with the relative inflamm monocyte signature. 
+
+```{r, fig.width = 7, fig.height = 5}
+count_df <- gsva_res_w_metadata %>%
+    group_by(tumor_type_abbr) %>%
+    summarise(n = n())
+coxph_inflamm_vs_m2_df %>%
+    mutate(name = str_extract(name, "^.*_tcga") %>% str_sub(end = -6)) %>%
+    left_join(count_df, by = c("name" = "tumor_type_abbr")) %>%
+    mutate(name = paste0(name, " (n=", n, ")")) %>%
+    ggplot() +
+    aes(name, estimate, color = p.value < 0.05) +
+    geom_point(shape = "square", size = 4) +
+    geom_errorbar(aes(ymin = conf.low, ymax = conf.high),
+                  width = 0.2) +
+    geom_hline(yintercept = 1, linetype = "dashed") +
+    geom_text(
+        aes(y = Inf, label = sprintf("p=%s", format(p.value, digits = 1))),
+        hjust = 1.1,
+        vjust = 0,
+        size = 2
+    ) +
+    geom_text(
+        aes(y = Inf,
+            label = sprintf(
+                "(%s -- %s)",
+                format(conf.low, digits = 1, scientific = F),
+                format(conf.high, digits = 1, scientific = F)
+            )),
+        size = 1.5,
+        hjust = 1.1,
+        vjust = 1.5
+    )+
+    labs(x = "", y = "Hazard Ratio") +
+    coord_flip()  +
+    scale_y_log10(expand = expansion(0.2)) +
+    scale_color_manual(values = c("grey", "black")) +
+    theme(
+        axis.line.y = element_blank(),
+        axis.ticks.y = element_blank(),
+        legend.position = "none"
+    )
+```
+
+After discussion with Brian on 8/22/2023, we decided to workshop a slightly different visualization. 
+
+```{r, fig.width = 7, fig.height = 4}
+count_df <- gsva_res_w_metadata %>%
+  group_by(tumor_type_abbr) %>%
+  summarise(n = n())
+coxph_inflamm_vs_m2_df %>%
+  mutate(name = str_extract(name, "^.*_tcga") %>% str_sub(end = -6)) %>%
+  left_join(count_df, by = c("name" = "tumor_type_abbr")) %>%
+  mutate(name = paste0(name, " (n=", n, ")")) %>%
+  ggplot() +
+  aes(fct_reorder(name, desc(estimate)), estimate, color = p.value < 0.05) +
+  geom_point(shape = "square", size = 3) +
+  geom_errorbar(aes(ymin = conf.low, ymax = conf.high),
+                width = 0) +
+  geom_hline(yintercept = 1, linetype = "dashed") +
+  geom_text(
+    aes(y = Inf, label = sprintf("p=%s", ifelse(p.value < 1e-3, 
+                                                format(p.value, digits = 2, scientific = T),
+                                                str_sub(as.character(p.value), end = 5)))),
+    size = 3,
+    hjust = 1,
+    vjust = 0.5
+  ) +
+  geom_text(
+    aes(y = Inf,
+        label = sprintf(
+          "%s (%s-%s)",
+          format(estimate, digits = 2, scientific = F), 
+          format(conf.low, digits = 2, scientific = F),
+          format(conf.high, digits = 2, scientific = F)
+        )),
+    size = 3,
+    hjust = 2, 
+    vjust = 0.5
+  ) +
+  labs(x = "", y = "Hazard Ratio") +
+  coord_flip()  +
+  scale_y_log10(expand = expansion(c(0, 0.7)), breaks = c(0.25, 0.5, 1, 2, 4)) +
+  scale_color_manual(values = c("grey", "black")) +
+  theme(
+    axis.line.y = element_blank(),
+    axis.ticks.y = element_blank(),
+    panel.grid.major.x = element_line(), 
+    legend.position = "none"
+  )
+```
+
+# Inflamm monocytes, survival, split by median 
+
+```{r}
+p_list <- list()
+for (tumor_type_str in unique(gsva_res_w_metadata$tumor_type)) {
+    p_list[[tumor_type_str]] <- ggsurvplot(
+        survfit_inflamm_monocytes_list[[tumor_type_str]], 
+        pval = TRUE, 
+        risk.table = TRUE, 
+        combine = FALSE, 
+        title = tumor_type_str
+    )
+}
+```
+
+```{r inflamm_monocytes_survival, fig.asp = 1}
+p_list
+```
+
+
+# Inflamm monocytes vs M2, survival, split by median 
+
+```{r}
+p_list <- list()
+for (tumor_type_str in unique(gsva_res_w_metadata$tumor_type)) {
+    p_list[[tumor_type_str]] <- ggsurvplot(
+        survfit_inflamm_vs_m2_list[[tumor_type_str]], 
+        pval = TRUE, 
+        risk.table = TRUE, 
+        combine = FALSE, 
+        title = tumor_type_str
+    )
+}
+```
+
+```{r inflamm_vs_m2_survival, fig.asp = 1}
+p_list
+```

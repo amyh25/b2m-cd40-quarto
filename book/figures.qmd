@@ -1,0 +1,1720 @@
+---
+title: "Figures"
+execute: 
+  freeze: auto 
+  message: false
+  warning: false
+---
+
+```{r}
+library(here)
+source(here("lib", "setup.R"))
+source(here("lib", "helper_Seurat.R"))
+source(here("lib", "helper.R"))
+source(here("lib", "aesthetics.R"))
+
+
+theme_set(
+    theme_classic() + theme(
+        title = element_text(size = 8), 
+        text = element_text(size = 8), 
+        plot.background = element_blank(), 
+        strip.background = element_blank(),
+        axis.ticks = element_line(size = 0.2),
+        axis.line = element_line(size = 0.2),
+        panel.spacing = unit(0.5, "lines"), 
+        legend.key.size = unit(8, "pt"), 
+        legend.spacing = unit(8, "pt"), 
+        legend.background = element_blank(),
+        legend.margin = margin()
+))
+```
+
+```{r so}
+so <- readRDS(file.path(results_dir, "so_filterRNA200mito10.rds"))
+so_T <- readRDS(file.path(results_dir, "so_filterRNA200mito10_subsetTremovedoublets.rds"))
+so_M <- readRDS(file.path(results_dir, "so_filterRNA200mito10_subsetMremovedoublets.rds"))
+```
+
+# Set up
+
+```{r}
+non_cd45_clusters <-
+    c("12: Tumor",
+      "16: Fibroblasts",
+      "17: Endothelial cells")
+metadata_T_clusters <- get_metadata_from_so(so_T, metadata = c("clusters_T"), reduction = NULL)
+metadata_M_clusters <- get_metadata_from_so(so_M, metadata = c("clusters_M"), reduction = NULL)
+metadata_all <- get_metadata_from_so(so) %>% 
+    mutate(clusters = ifelse(clusters == "11: Irf8-high DCs", "11: cDC1s", clusters)) %>% 
+    left_join(metadata_T_clusters, by = "cell") %>% 
+    left_join(metadata_M_clusters, by = "cell") %>% 
+    mutate(from_subclusters = dplyr::case_when(
+        !is.na(clusters_M) ~ as.character(clusters_M),
+        !is.na(clusters_T) ~ as.character(clusters_T),
+        clusters %in% c(non_cd45_clusters, "14: B cells") ~ clusters, 
+        TRUE ~ "doublets"
+    )) 
+
+metadata_all <- metadata_all %>% 
+    mutate(clusters = factor(clusters, levels = cluster_ID_name_ordered)) %>% 
+    mutate(group = factor(group, levels = rev(sort(unique(group))))) %>% 
+    mutate(genotype = factor(genotype, levels = c("Ctrl", "B2m KO"))) %>% 
+    mutate(treatment = factor(treatment, levels = c("Isotype", "CD40 agonist"))) 
+
+metadata_M <- get_metadata_from_so(so_M) %>% 
+    mutate(clusters_M = factor(clusters_M, levels = cluster_M_name_ordered)) %>%
+    mutate(group = factor(group, levels = rev(sort(unique(group))))) %>% 
+    mutate(genotype = factor(genotype, levels = c("Ctrl", "B2m KO"))) %>% 
+    mutate(treatment = factor(treatment, levels = c("Isotype", "CD40 agonist"))) 
+```
+
+```{r}
+h_signature_path <- here("data", "signatures", "h_mouse.gmt")
+ifng_response_genes <- read_tsv(h_signature_path, col_names = FALSE) %>% 
+    filter(X1 == "HALLMARK_INTERFERON_GAMMA_RESPONSE") %>% 
+    column_to_rownames("X1") %>% 
+    as.vector() %>% 
+    unlist() %>% 
+    unname()
+```
+
+# Figure 1: Effect of B2m KO (& Introduce scRNAseq)
+
+## Introduce scRNAseq
+
+```{r p_umap_all, fig.width = 2, fig.height = 2}
+p_umap_all <- metadata_all %>%
+  filter(from_subclusters != "doublets") %>% 
+    plot_umap(
+        color_str = "general_cell_types",
+        pixels = c(2048, 2048),
+        pointsize = 2.1
+    ) +
+    geom_text_repel(
+        aes(label = general_cell_types),
+        data = ~..1 %>% 
+            group_by(general_cell_types) %>% 
+            summarise(UMAP_1 = mean(UMAP_1), 
+                      UMAP_2 = mean(UMAP_2)),
+        force = 5,
+        size = 2
+    ) + 
+    scale_y_continuous(expand = expansion(mult = 0.15)) +
+    annotate(
+        "text",
+        x = -Inf,
+        y = -Inf,
+        label = "Total cells = 89,979",
+        size = 2,
+        hjust = -0.05,
+        vjust = -0.5
+    ) + 
+    scale_color_manual(values = rev(social_palette)[c(8, 4, 5, 6, 3)]) +
+    theme(legend.position = "none")
+p_umap_all
+```
+
+```{r p_stackedbar_all}
+prop_all_df <- metadata_all %>% 
+    filter(from_subclusters != "doublets") %>% 
+    calculate_proportion(general_cell_types, group) %>% 
+    separate(col = "group", into = c("genotype", "treatment"), sep = "__", remove = FALSE) 
+p_stackedbar_all <- prop_all_df %>% 
+    ggplot() + 
+    aes(group, prop, fill = general_cell_types) + 
+    geom_col() + 
+    scale_y_continuous(expand = c(0, 0)) + 
+    remove_spines() + 
+    scale_fill_manual(values = rev(social_palette)[c(8, 4, 5, 6, 3)]) + 
+    theme(axis.text.y = element_blank(), 
+          axis.text.x = element_blank(),
+          axis.title = element_blank(), 
+          legend.position = "none")
+```
+
+```{r p_label}
+sym_df <- metadata_all %>% 
+    select(group, treatment, genotype) %>% 
+    unique() %>% 
+    mutate(symbol = "+") 
+p_label <- left_join(
+    pivot_wider(
+        sym_df,
+        id_cols = group,
+        names_from = treatment,
+        values_from = symbol,
+        values_fill = "-"
+    ),
+    pivot_wider(
+        sym_df,
+        id_cols = group,
+        names_from = genotype,
+        values_from = symbol,
+        values_fill = "-"
+    ),
+    by = "group"
+) %>%
+    pivot_longer(cols = 2:5) %>%
+    mutate(name = ifelse(name == "Ctrl", "WT", name)) %>% 
+    mutate(name = factor(name, levels = rev(c("WT", "B2m KO", "Isotype", "CD40 agonist")))) %>% 
+    filter(name %in% c("B2m KO", "CD40 agonist")) %>% 
+    ggplot() +
+    aes(group, name, label = value) +
+    geom_text(size = 2.5) +
+    remove_spines() +
+    theme(
+        axis.text.x = element_blank(),
+        axis.title.x = element_blank(),
+        axis.title.y = element_blank(),
+        plot.margin = margin()
+    )
+```
+
+```{r, fig.width = 3.2, fig.height = 3}
+p1 <- plot_grid(
+    p_umap_all,
+    p_stackedbar_all +
+        theme(plot.margin = margin()),
+    ncol = 2,
+    rel_widths = c(7, 1),
+    align = "h",
+    axis = "tb"
+)
+p2 <- plot_grid(
+    p_label + 
+        geom_point(size = 10, color = "white") +
+        scale_y_discrete(position = "right") + 
+        theme(axis.text.y = element_text(hjust = 1)),
+    p_label + theme(axis.text.y = element_blank()), 
+    ncol = 2, 
+    rel_widths = c(7, 1)
+)
+plot_grid(p1, p2, ncol = 1, rel_heights = c(12, 1))
+```
+
+## Effect of B2m KO
+
+```{r}
+norm_counts <- readRDS(file.path(results_dir, "pb_iso_macs_norm_counts.rds"))
+dge_b2m.v.WT <- read_tsv(
+  file.path(
+    results_dir, 
+    "dge_pb_iso_macs_b2m.v.wt.tsv"
+  )
+)
+```
+
+### Heatmap visualization
+
+```{r}
+topn <- 100
+top_n_genes <- dge_b2m.v.WT %>% 
+  filter(log2FoldChange > 0) %>% 
+  arrange(padj) %>% 
+  head(topn) %>% 
+  .$gene
+bot_n_genes <- dge_b2m.v.WT %>% 
+  filter(log2FoldChange < 0) %>% 
+  arrange(padj) %>% 
+  head(topn) %>% 
+  .$gene
+```
+
+Looking at the top 100 genes, either way
+
+```{r, fig.width = 3, fig.height = 5}
+#| fig-width: 3
+#| fig-height: 5 
+
+h_mtx <- norm_counts %>% 
+  filter(gene %in% top_n_genes | gene %in% bot_n_genes) %>% 
+  mutate(gene = factor(gene, levels = c(top_n_genes, rev(bot_n_genes)))) %>% 
+  arrange(gene) %>% 
+  column_to_rownames("gene") %>% 
+  as.matrix() %>% 
+  t() %>% 
+  scale() %>% 
+  t()
+Heatmap(h_mtx, 
+        cluster_rows = FALSE, 
+        name = "scaled expr.",
+        show_row_names = FALSE)
+```
+
+### GSEA curve
+
+```{r}
+sig_dir <- here("data", "signatures")
+mouse_human_genes <- readRDS(here("data", "signatures", "mouse_human_genes.rds")) %>% 
+    as_tibble()
+jablonski_df <-
+    read_tsv(
+        file.path(
+            sig_dir,
+            "m2_sigs",
+            "Combined_Jablonski_Alt_Class_Mac.gmt.txt"
+        ),
+        col_names = FALSE
+    ) %>% 
+    dplyr::rename(signature = X1, source = X2) %>% 
+    dplyr::select(-X759) %>% 
+    pivot_longer(cols = 3:ncol(.), 
+                 names_to = "column", 
+                 values_to = "gene") %>% 
+    filter(!is.na(gene)) %>% 
+    dplyr::select(-column) %>% 
+    left_join(mouse_human_genes, by = c("gene" = "HGNC.symbol")) %>% 
+    dplyr::rename(human_gene = gene) %>% 
+    dplyr::rename(gene = MGI.symbol) 
+jablonski_gs <- jablonski_df %>% 
+    drop_na(gene) %>% 
+    named_group_split(signature) %>% 
+    map(~..1$gene)
+```
+
+```{r}
+ranked_b2m_KO <- dge_b2m.v.WT %>% 
+    mutate(signed_pval = ifelse(log2FoldChange > 0, -log10(pvalue + 1e-100), log10(pvalue + 1e-100))) %>% 
+    arrange(desc(signed_pval), desc(log2FoldChange)) %>% 
+    {set_names(.$signed_pval, .$gene)}
+altact_jab_df <- Rsc::get_leading_edge_df(ranked_b2m_KO, gs_vec = jablonski_gs$`AltActivated(IL4)_Jablonski`)
+leg_df <- jablonski_gs %>% 
+    map_dfr(~Rsc::get_leading_edge_df(ranked_b2m_KO, gs_vec = ..1), 
+            .id = "gs_name") 
+```
+
+```{r, fig.width = 2, fig.height = 2}
+p_curve <- leg_df %>% 
+    filter(str_detect(gs_name, "Jablonski")) %>% 
+    mutate(gs_name = gs_name %>% str_extract(".*_") %>% str_sub(end = -2)) %>% 
+    ggplot() + 
+    aes(rank, running_es) + 
+    geom_hline(yintercept = 0, linetype = "dashed", size = 0.2) + 
+    geom_line(aes(color = gs_name)) + 
+    scale_y_continuous(limits = ~c(..1[1]*1.4, ..1[2])) + 
+    remove_x_spine() + 
+    theme(legend.position = c(0.5, 0.05), 
+          legend.title = element_blank(), 
+          axis.text.x = element_blank(), 
+          axis.title.x = element_blank()) 
+p_ticks <- leg_df %>% 
+    filter(str_detect(gs_name, "Jablonski")) %>% 
+    mutate(gs_name = gs_name %>% str_extract(".*_") %>% str_sub(end = -2)) %>% 
+    filter(in_gs) %>% 
+    ggplot() + 
+    aes(rank, gs_name) + 
+    geom_point(aes(color = gs_name), shape = "|", alpha = 0.5, 
+               data = ~..1 %>% slice_sample(prop = 0.25)) + 
+    remove_spines() + 
+    theme(axis.text.y = element_blank(), 
+          axis.title.y = element_blank(), 
+          legend.position = "none", 
+          plot.margin = margin())
+plot_grid(p_curve, p_ticks, ncol = 1, align = "v", axis = "lr", rel_heights = c(3, 1))
+```
+
+# Figure 2
+
+No 'omics figures here! 
+
+# Figure 3
+
+## Influx of CD8+ T cells
+
+```{r galaxy, fig.width = 4, fig.height = 1.3}
+metadata_all %>%
+    filter(from_subclusters != "doublets") %>%
+    mutate(genotype = factor(genotype, levels = c("Ctrl", "B2m KO"))) %>% 
+    mutate(treatment = factor(treatment, levels = c("Isotype", "CD40 agonist"))) %>% 
+    ggplot() +
+    aes(UMAP_1, UMAP_2) +
+    stat_density_2d(aes(fill = ..density..),
+                    geom = "raster",
+                    contour = FALSE) +
+    geom_text(aes(label = paste0(genotype, "\n", treatment), 
+                  x = min(metadata_all$UMAP_1), y = min(metadata_all$UMAP_2)),
+              hjust = 0, vjust = 0, 
+              color = "white", 
+              size = 2, 
+              data = ~..1 %>% select(treatment, genotype) %>% unique()) + 
+    scale_fill_viridis(option = "magma") +
+    scale_x_continuous(expand = expansion(mult = 0.05)) +
+    scale_y_continuous(expand = expansion(mult = 0.05)) +
+    scale_fill_viridis(option = "magma",
+                       limits = c(0, 0.03),
+                       oob = scales::squish)+
+    facet_wrap( ~ genotype + treatment, scale = "free_y", ncol = 4) +
+    remove_spines() +
+    theme(
+        strip.background = element_blank(), 
+        strip.text = element_blank(), 
+        axis.text = element_blank(),
+        panel.spacing = unit(0, "pt"),
+        panel.background = element_rect(fill = "black"),
+        legend.text = element_text(angle = 45, hjust = 1, vjust = 1.3),
+        legend.title = element_blank(),
+        legend.position = c(0.91,-0.25),
+        legend.direction = "horizontal",
+        aspect.ratio = diff(range(metadata_all$UMAP_2)) /
+            diff(range(metadata_all$UMAP_1)), 
+        axis.title.x = element_text(vjust = 1), 
+        axis.title.y = element_text(vjust = 0)
+    ) + 
+    labs(x = "UMAP dim. 1", y = "UMAP dim. 2")
+```
+
+## Proportion of immune cells
+
+```{r prop_df}
+genotype_treatment_mouse_key_df <- metadata_all %>%
+    select(genotype, treatment, mouse) %>%
+    unique()
+prop_df <- metadata_all %>%
+    filter(from_subclusters != "doublets") %>%
+    filter(!(clusters %in% non_cd45_clusters)) %>%
+    mutate(
+        grouped_clusters = case_when(
+            clusters %>% str_detect("^1:|^2:|^3:|^4:|^5:|^6:") ~ "Mono/Mac",
+            clusters %>% str_detect("^14:") ~ "B cell",
+            clusters %>% str_detect("^9:|^10:|^11:|^15:") ~ "DC",
+            clusters %>% str_detect("^0:|^7:") ~ "T cell",
+            clusters %>% str_detect("^8:") ~ "NK",
+            clusters %>% str_detect("^13:") ~ "Neutrophils"
+        )
+    ) %>%
+    calculate_proportion(grouped_clusters, mouse) %>%
+    left_join(genotype_treatment_mouse_key_df, by = "mouse") %>%
+    # filter(genotype == "Ctrl") %>%
+    mutate(percent = prop * 100) %>% 
+    mutate(treatment = factor(treatment, levels = c("Isotype", "CD40 agonist"))) %>% 
+    mutate(genotype = factor(genotype, levels = c("Ctrl", "B2m KO")))
+```
+
+```{r glm_treatment_df}
+glm_out_df <- prop_df %>%
+    group_by(grouped_clusters) %>%
+    summarise(glm_out = broom::tidy(
+        glm(
+            prop ~ treatment + genotype,
+            family = quasibinomial,
+            weights = total
+        )
+    )) %>%
+    unnest(glm_out)
+glm_treatment_df <- glm_out_df %>% 
+    filter(term == "treatmentCD40 agonist") %>% 
+    ungroup() %>% 
+    mutate(p_BH = p.adjust(p.value, method = "BH")) %>% 
+    mutate_signif_levels(p_BH)
+```
+
+```{r}
+# not significant by wilcoxon
+wilcox_out_df <- prop_df %>%
+    group_by(grouped_clusters, genotype) %>%
+    summarise(glm_out = broom::tidy(wilcox.test(prop ~ treatment))) %>%
+    unnest(glm_out) %>% 
+    ungroup() %>% 
+    mutate(p_BH = p.adjust(p.value, method = "BH")) %>% 
+    mutate_signif_levels(p_BH)
+```
+
+```{r}
+glm_out_df <- prop_df %>%
+    group_by(grouped_clusters, genotype) %>%
+    summarise(glm_out = broom::tidy(glm(prop ~ treatment, family = quasibinomial, weights = total))) %>%
+    unnest(glm_out)
+
+glm_treatment_df <- glm_out_df %>% 
+    filter(term == "treatmentCD40 agonist") %>% 
+    group_by(genotype) %>% 
+    mutate(p_BH = p.adjust(p.value, method = "BH")) %>% 
+    ungroup() %>% 
+    mutate(signif = case_when(
+        p_BH < 0.001 ~ "***", 
+        p_BH < 0.01 ~ "**", 
+        p_BH < 0.05 ~ "*", 
+        TRUE ~ ""
+    )) %>% 
+    relocate(signif, .after = grouped_clusters)
+```
+
+
+```{r, fig.width = 4, fig.height = 2}
+plot_prop_by_genotype <- function(genotype_str) {
+    if (genotype_str == "B2m KO") {
+        jitter_shape <- 21
+    } else {
+        jitter_shape <- 23
+    }
+    prop_df %>%
+        filter(genotype == genotype_str) %>%
+        ggplot() +
+        aes(treatment, percent, color = treatment) +
+        geom_col(
+            aes(fill = treatment, color = treatment),
+            width = 0.75,
+            alpha = 0.5,
+            data = ~ ..1 %>%
+                group_by(treatment, grouped_clusters) %>%
+                summarise(percent = mean(percent))
+        ) +
+        geom_jitter(
+            shape = jitter_shape,
+            fill = "white",
+            size = 1,
+            width = 0.2
+        ) +
+        geom_text(
+            aes(
+                x = 1.5,
+                y = percent + 12,
+                label = signif,
+                color = NA
+            ),
+            color = "black",
+            size = 3,
+            data = ~ ..1 %>%
+                group_by(grouped_clusters) %>%
+                filter(percent == max(percent)) %>%
+                ungroup() %>%
+                left_join(glm_treatment_df, by = c("grouped_clusters", "genotype")) %>%
+                filter(genotype == genotype_str)
+        ) +
+        geom_segment(
+            aes(
+                x = 1,
+                xend = 2,
+                y = percent + 10,
+                yend = percent + 10
+            ),
+            size = 0.5,
+            color = "black",
+            data = ~ ..1 %>%
+                group_by(grouped_clusters) %>%
+                filter(percent == max(percent)) %>%
+                ungroup() %>%
+                left_join(glm_treatment_df, by = c("grouped_clusters", "genotype")) %>%
+                filter(signif != "") %>%
+                filter(genotype == genotype_str)
+        ) +
+        facet_wrap(~ grouped_clusters,
+                   strip.position = "bottom",
+                   ncol = 6) +
+        scale_y_continuous(expand = c(0, 0), limits = ~ c(0, 100)) +
+        scale_fill_manual(values = palette_treatment) +
+        scale_color_manual(values = palette_treatment) +
+        scale_shape_manual(values = c(23, 21)) +
+        remove_x_spine() +
+        theme(
+            axis.text.x = element_blank(),
+            axis.title.x = element_blank(),
+            legend.position = c(0.8, 0.8),
+            legend.direction = "vertical",
+            legend.title = element_blank()
+        )  +
+        labs(y = "Freq. of immune cells (%)")
+}
+plot_prop_by_genotype(genotype_str = "Ctrl") + 
+    labs(title = "WT") + 
+    theme(plot.title = element_text(vjust = -6, hjust = 0.02))
+plot_prop_by_genotype(genotype_str = "B2m KO") + 
+    labs(title = "B2m-null") + 
+    theme(plot.title = element_text(vjust = -6, hjust = 0.02))
+```
+
+## Lymphoid cells produce IFNg; myeloid cells respond
+
+### T cell UMAP
+
+```{r, fig.width = 3, fig.height = 2}
+get_metadata_from_so(so_T) %>%
+    mutate(clusters_T = factor(clusters_T, levels = cluster_T_name_ordered)) %>%
+    plot_umap(
+        color_str = "clusters_T",
+        pixels = c(2048, 2048),
+        pointsize = 5.1, 
+        x = umap_1, y = umap_2
+    ) +
+    geom_text_repel(
+        aes(label = clusters_T),
+        data = ~..1 %>% 
+            group_by(clusters_T) %>% 
+            summarise(umap_1 = mean(umap_1), 
+                      umap_2 = mean(umap_2)),
+        force = 5,
+        size = 2
+    ) + 
+    scale_y_continuous(expand = expansion(mult = 0.15)) +
+    annotate(
+        "text",
+        x = -Inf,
+        y = -Inf,
+        label = "T/NK cells\nn = 24,657",
+        size = 2,
+        hjust = -0.1,
+        vjust = -0.25
+    ) + 
+    scale_color_manual(values = palette_cluster_T) +
+    theme(legend.position = "none")
+```
+
+```{r}
+prop_t_df <- get_metadata_from_so(so_T) %>%
+  calculate_proportion(clusters_T, group) %>%
+  separate(
+    col = "group",
+    into = c("genotype", "treatment"),
+    sep = "__",
+    remove = FALSE
+  )
+```
+
+```{r}
+run_binom_on_tbl <- function(.tbl) {
+  isotype_tbl <- .tbl %>% filter(treatment == "Isotype")
+  cd40_tbl <- .tbl %>% filter(treatment == "CD40 agonist")
+  p_ctrl <- isotype_tbl$count / isotype_tbl$total
+  out <- binom.test(cd40_tbl$count, cd40_tbl$total, p_ctrl, alternative = "two.sided")
+  return(out)
+}
+binom_prop_t_out <- prop_t_df %>% 
+  named_group_split(clusters_T, genotype) %>% 
+  map_dfr(~broom::tidy(run_binom_on_tbl(..1)), .id = "cluster_genotype") %>% 
+  separate(cluster_genotype, into = c("clusters_T", "genotype"), sep = " / ") %>% 
+  mutate(p.adj = p.adjust(p.value, method = "BH")) %>% 
+  mutate_signif_levels(p.adj) %>% 
+  mutate(signif = ifelse(signif == "", "n.s.", signif))
+```
+
+```{r p_stackedbar_t, fig.height = 3, fig.width = 2}
+p_stackedbar_t <- prop_t_df %>% 
+  arrange(desc(clusters_T)) %>%
+  mutate(clusters_T = factor(clusters_T, levels = names(palette_cluster_T))) %>%
+  ggplot() +
+  aes(group, prop, fill = clusters_T) +
+  geom_col() +
+  geom_text(
+    aes(y = pos_y, label = paste0(str_extract(clusters_T, ".*:"), signif)),
+    data = ~ ..1 %>%
+      left_join(binom_prop_t_out, by = c("genotype", "clusters_T")) %>%
+      mutate(clusters_T = factor(clusters_T, levels = names(palette_cluster_T))) %>% 
+      filter(treatment == "CD40 agonist") %>% 
+      arrange(desc(clusters_T)) %>%
+      group_by(genotype) %>% 
+      mutate(cumsum_prop = cumsum(prop)) %>% 
+      mutate(pos_y = cumsum_prop - (prop / 2)), 
+    size = 1.5, 
+    vjust = 0.5
+  ) + 
+  facet_grid(~genotype, scale = "free_x") + 
+  scale_y_continuous(expand = c(0, 0)) +
+  remove_spines() +
+  scale_fill_manual(values = palette_cluster_T) +
+  theme(
+    axis.text.y = element_blank(),
+    axis.text.x = element_blank(),
+    axis.title = element_blank(),
+    legend.position = "none"
+  )
+p_stackedbar_t
+```
+
+### ifng in lymphocytes, grouped
+
+```{r}
+ifng_df <- get_metadata_from_so(so_T, genes = c("Ifng")) %>% 
+    filter(!(general_T_subtypes %in% c("gdT and ILC2", "IFN-sensing"))) %>% 
+    mutate(general_T_subtypes = ifelse(general_T_subtypes == "Tregs", 
+                                       "CD4+ T", general_T_subtypes)) %>% 
+    mutate(general_T_subtypes = ifelse(general_T_subtypes == "Proliferating", 
+                                       "CD8+ T", general_T_subtypes)) %>% 
+    filter(general_T_subtypes != "Naïve T") %>% 
+    filter(genotype == "B2m KO") %>% 
+    mutate(treatment = factor(treatment, levels = c("Isotype", "CD40 agonist")))
+plot_df <- ifng_df %>% 
+    group_by(general_T_subtypes, mouse, group, treatment) %>% 
+    summarise(mean_ifng = mean(Ifng)) %>% 
+    ungroup()
+dist_df <- plot_df %>% 
+    group_by(treatment, general_T_subtypes) %>% 
+    summarise(mean_mean_ifng = mean(mean_ifng), 
+              sd_mean_ifng = sd(mean_ifng),
+              se_mean_ifng = sd_mean_ifng / sqrt(n()), 
+              ymin = mean_mean_ifng - se_mean_ifng, 
+              ymax = mean_mean_ifng + se_mean_ifng)
+t_out <- plot_df %>% 
+    group_by(general_T_subtypes) %>% 
+    summarise(out = broom::tidy(t.test(mean_ifng ~ treatment))) %>% 
+    unnest(cols = out) %>% 
+    mutate(p_BH = p.adjust(p.value, method = "BH")) %>% 
+    mutate_signif_levels(p_BH) 
+```
+
+
+```{r, fig.width = 2, fig.height = 2}
+plot_df %>% 
+    ggplot() + 
+    aes(treatment, mean_ifng) + 
+    geom_errorbar(
+        aes(
+            ymin = mean_mean_ifng,
+            ymax = mean_mean_ifng,
+            y = NULL, 
+            color = treatment),
+        data = dist_df,
+        width = 0.5, 
+        size = 0.2
+    ) + 
+    geom_errorbar(
+        aes(
+            ymin = ymin,
+            ymax = ymax,
+            y = NULL,
+            color = treatment
+        ),
+        data = dist_df,
+        width = 0.3, 
+        size = 0.2
+    ) +
+    geom_jitter(
+        aes(color = treatment),
+        shape = 21, 
+        fill = "white",
+        size = 1,
+        width = 0.2
+    ) +
+    geom_text(
+        aes(x = 1.5, label = signif), 
+        data = ~..1 %>% 
+            group_by(general_T_subtypes) %>% 
+            summarise(mean_ifng = max(mean_ifng) + 0.15) %>% 
+            left_join(t_out, by = "general_T_subtypes")
+    ) + 
+    geom_segment(
+        aes(x = 1, xend = 2, yend = mean_ifng), 
+        data = ~..1 %>% 
+            group_by(general_T_subtypes) %>% 
+            summarise(mean_ifng = max(mean_ifng) + 0.1) %>% 
+            left_join(t_out, by = "general_T_subtypes") %>% 
+            filter(signif != "")
+    ) + 
+    facet_wrap(~general_T_subtypes, ncol = 5, strip.position = "bottom") + 
+    scale_y_continuous(expand = c(0, 0), limits = ~c(-0.005, ..1[2]*1.1)) +
+    remove_x_spine() +
+    scale_color_manual(values = palette_treatment) +
+    scale_fill_manual(values = palette_treatment) +
+    theme(axis.text.x = element_blank(),
+          axis.title.x = element_blank(), 
+          panel.spacing = unit(1, "lines"),
+          legend.position = c(0.5, 0.95),
+          legend.direction = "vertical", 
+          legend.title = element_blank()) +
+    labs(y = "Mean log-normalized Ifng")
+```
+
+### ifng in lymphocytes, NOT grouped
+
+```{r}
+ifng_df <- get_metadata_from_so(so_T, genes = c("Ifng")) %>%
+  filter(genotype == "B2m KO") %>%
+  filter(!(clusters_T %in% c("9: IFN-sensing T", "10: gdT and ILC2"))) %>% 
+  mutate(treatment = factor(treatment, levels = c("Isotype", "CD40 agonist"))) %>% 
+  mutate(clusters_T = factor(clusters_T, levels = sort(as.character(unique(clusters_T)))))
+plot_df <- ifng_df %>%
+  group_by(clusters_T, mouse, group, treatment) %>%
+  summarise(mean_ifng = mean(Ifng)) %>%
+  ungroup()
+dist_df <- plot_df %>%
+  group_by(treatment, clusters_T) %>%
+  summarise(
+    mean_mean_ifng = mean(mean_ifng),
+    sd_mean_ifng = sd(mean_ifng),
+    se_mean_ifng = sd_mean_ifng / sqrt(n()),
+    ymin = mean_mean_ifng - se_mean_ifng,
+    ymax = mean_mean_ifng + se_mean_ifng
+  )
+t_out <- plot_df %>%
+  group_by(clusters_T) %>%
+  summarise(out = broom::tidy(t.test(mean_ifng ~ treatment))) %>%
+  unnest(cols = out) %>%
+  mutate(p_BH = p.adjust(p.value, method = "BH")) %>%
+  mutate_signif_levels(p_BH) 
+```
+
+
+```{r, fig.width = 6, fig.height = 3}
+plot_df %>%
+  ggplot() +
+  aes(treatment, mean_ifng) +
+  geom_errorbar(
+    aes(
+      ymin = mean_mean_ifng,
+      ymax = mean_mean_ifng,
+      y = NULL,
+      color = treatment
+    ),
+    data = dist_df,
+    width = 0.5,
+    size = 0.2
+  ) +
+  geom_errorbar(
+    aes(
+      ymin = ymin,
+      ymax = ymax,
+      y = NULL,
+      color = treatment
+    ),
+    data = dist_df,
+    width = 0.3,
+    size = 0.2
+  ) +
+  geom_jitter(
+    aes(color = treatment),
+    shape = 21,
+    fill = "white",
+    size = 1,
+    width = 0.2
+  ) +
+  geom_text(
+    aes(x = 1.5, label = signif),
+    data = ~ ..1 %>%
+      group_by(clusters_T) %>%
+      summarise(mean_ifng = max(mean_ifng) + 0.15) %>%
+      left_join(t_out, by = "clusters_T") 
+  ) +
+  geom_segment(
+    aes(x = 1, xend = 2, yend = mean_ifng),
+    data = ~ ..1 %>%
+      group_by(clusters_T) %>%
+      summarise(mean_ifng = max(mean_ifng) + 0.1) %>%
+      left_join(t_out, by = "clusters_T") %>%
+      filter(signif != "") 
+  ) +
+  facet_wrap( ~ clusters_T, ncol = 20, strip.position = "bottom") +
+  scale_y_continuous(expand = c(0, 0), limits = ~ c(-0.005, ..1[2])) +
+  remove_x_spine() +
+  scale_color_manual(values = palette_treatment) +
+  scale_fill_manual(values = palette_treatment) +
+  theme(
+    axis.text.x = element_blank(),
+    axis.title.x = element_blank(),
+    strip.text.x = element_text(
+      angle = 90,
+      hjust = 1,
+      vjust = 0.5
+    ),
+    panel.spacing = unit(1, "lines"),
+    legend.position = c(0.65, 0.9),
+    legend.direction = "vertical",
+    legend.title = element_blank()
+  ) +
+  labs(y = "Mean log-normalized Ifng")
+```
+
+### ifng response in ALL
+
+```{r}
+vision_dir <- file.path(results_dir, "vision_out")
+vision_list <- list.files(file.path(vision_dir)) %>% 
+    set_names(c("all", "M", "L", "Lexh")) %>% 
+    map(~readRDS(file.path(vision_dir, ..1)))
+H_ifngr_df <- bind_rows(
+    vision_list$M %>% mutate(compartment = "myeloid"), 
+    vision_list$Lexh %>% mutate(compartment = "T/NK")
+) %>% select(cell, compartment, HALLMARK_INTERFERON_GAMMA_RESPONSE)
+```
+
+```{r}
+ifngr_ALL_df <- metadata_all %>%
+    left_join(H_ifngr_df, by = "cell") %>% 
+    drop_na(HALLMARK_INTERFERON_GAMMA_RESPONSE) %>% 
+    filter(genotype == "B2m KO") %>% 
+    mutate(treatment = factor(treatment, levels = c("Isotype", "CD40 agonist")))
+plot_df <- ifngr_ALL_df %>% 
+    group_by(treatment, mouse, compartment) %>% 
+    summarise(mean_ifngr = mean(HALLMARK_INTERFERON_GAMMA_RESPONSE)) %>% 
+    ungroup()
+dist_df <- plot_df %>% 
+    group_by(treatment, compartment) %>% 
+    summarise(mean_mean_ifngr = mean(mean_ifngr), 
+              sd_mean_ifngr = sd(mean_ifngr),
+              se_mean_ifngr = sd_mean_ifngr / sqrt(n()), 
+              ymin = mean_mean_ifngr - se_mean_ifngr, 
+              ymax = mean_mean_ifngr + se_mean_ifngr)
+t_out <- plot_df %>% 
+    group_by(compartment) %>% 
+    summarise(out = broom::tidy(t.test(mean_ifngr ~ treatment))) %>% 
+    unnest(cols = out) %>% 
+    mutate(p_BH = p.adjust(p.value, method = "BH")) %>% 
+    mutate_signif_levels(p_BH) 
+```
+
+
+```{r, fig.width = 2, fig.height = 2}
+plot_df %>% 
+    ggplot() + 
+    aes(treatment, mean_ifngr) + 
+    geom_errorbar(
+        aes(
+            ymin = mean_mean_ifngr,
+            ymax = mean_mean_ifngr,
+            y = NULL, 
+            color = treatment),
+        data = dist_df,
+        width = 0.5, 
+        size = 0.2
+    ) + 
+    geom_errorbar(
+        aes(
+            ymin = ymin,
+            ymax = ymax,
+            y = NULL,
+            color = treatment
+        ),
+        data = dist_df,
+        width = 0.3, 
+        size = 0.2
+    ) +
+    geom_jitter(
+        aes(color = treatment),
+        shape = 21, 
+        fill = "white",
+        size = 1,
+        width = 0.2
+    ) +
+    geom_text(
+        aes(x = 1.5, label = signif),
+        data = ~..1 %>%
+            group_by(compartment) %>%
+            summarise(mean_ifngr = max(mean_ifngr) + 0.15) %>%
+            left_join(t_out, by = "compartment")
+    ) +
+    geom_segment(
+        aes(x = 1, xend = 2, yend = mean_ifngr),
+        data = ~..1 %>%
+            group_by(compartment) %>%
+            summarise(mean_ifngr = max(mean_ifngr) + 0.1) %>%
+            left_join(t_out, by = "compartment") %>%
+            filter(signif != "")
+    ) +
+    facet_wrap(~compartment, ncol = 5, strip.position = "bottom") + 
+    scale_y_continuous(expand = c(0, 0), limits = ~c(-0.005, ..1[2]*1.1)) +
+    remove_x_spine() +
+    scale_color_manual(values = palette_treatment) +
+    scale_fill_manual(values = palette_treatment) +
+    theme(axis.text.x = element_blank(),
+          axis.title.x = element_blank(), 
+          panel.spacing = unit(1, "lines"),
+          legend.position = c(0.8, 0.95),
+          legend.direction = "vertical", 
+          legend.title = element_blank()) +
+    labs(y = "Ifng response score (VISION)")
+```
+
+```{r, fig.width = 3, fig.height = 2}
+ifngr_ALL_df %>%
+    filter(genotype == "B2m KO") %>%
+    plot_umap(color_str = "HALLMARK_INTERFERON_GAMMA_RESPONSE",
+              fix_coords = FALSE,
+              pixels = c(1024, 1024),
+              pointsize = 2.1) +
+    facet_wrap( ~ treatment, scale = "free") +
+    labs(color = "IFNg response score (VISION)") +
+    scale_x_continuous(expand = expansion(mult = .1)) +
+    scale_y_continuous(expand = expansion(mult = .1)) +
+    scale_color_viridis(option = "magma", end = 0.9) + 
+    theme(
+        legend.position = "bottom",
+        legend.title = element_text(size = 6, vjust = 0.9),
+        strip.background = element_blank(),
+        aspect.ratio = diff(range(metadata_all$UMAP_2)) /
+            diff(range(metadata_all$UMAP_1))
+    )
+```
+
+```{r ifngr-rank-by-treatment}
+ifng_rank_by_treatment_df <- ifngr_ALL_df %>%
+  filter(genotype == "B2m KO") %>%
+  group_by(treatment) %>% 
+  arrange(HALLMARK_INTERFERON_GAMMA_RESPONSE) %>% 
+  mutate(rank = row_number(), 
+         norm_rank = rank / n()) %>% 
+  ungroup()
+ifng_rank_by_treatment_df %>% 
+  ggplot() + 
+  aes(norm_rank, HALLMARK_INTERFERON_GAMMA_RESPONSE, color = treatment) + 
+  geom_line()
+```
+
+```{r}
+ifngr_ALL_list <- ifngr_ALL_df %>%
+  filter(genotype == "B2m KO") %>% 
+  named_group_split(treatment) %>% 
+  map(~..1$HALLMARK_INTERFERON_GAMMA_RESPONSE)
+ks.test(ifngr_ALL_list$Isotype, ifngr_ALL_list$`CD40 agonist`)
+```
+
+# Figure 4
+
+## myeloid UMAP
+
+```{r, fig.width = 3, fig.asp = 1}
+p_umap_M <- metadata_M %>%
+  plot_umap(
+    x = umap_1,
+    y = umap_2,
+    color_str = "clusters_M",
+    pixels = c(2048, 2048),
+    pointsize = 3.1
+  ) +
+  geom_text_repel(
+    aes(label = clusters_M),
+    data = ~ ..1 %>%
+      group_by(clusters_M) %>%
+      summarise(umap_1 = mean(umap_1), umap_2 = mean(umap_2)),
+    force = 5,
+    size = 2
+  ) +
+  scale_y_continuous(expand = expansion(mult = 0.15)) +
+  annotate(
+    "text",
+    x = -Inf,
+    y = -Inf,
+    label = "Myeloid cells\nn=60,435",
+    size = 2,
+    hjust = -0.1,
+    vjust = -0.25
+  ) +
+  scale_color_manual(values = palette_cluster_M) +
+  theme(legend.position = "none")
+p_umap_M
+```
+
+```{r p_stackedbar_M}
+p_stackedbar_M <- metadata_M %>% 
+    calculate_proportion(clusters_M, group) %>% 
+    separate(col = "group", into = c("genotype", "treatment"), sep = "__", remove = FALSE) %>% 
+    ggplot() + 
+    aes(group, prop, fill = clusters_M) + 
+    geom_col() + 
+    scale_y_continuous(expand = c(0, 0)) + 
+    remove_spines() + 
+    scale_fill_manual(values = palette_cluster_M) + 
+    theme(axis.text.y = element_blank(), 
+          axis.text.x = element_blank(),
+          axis.title = element_blank(), 
+          legend.position = "none")
+```
+
+
+```{r, fig.width = 3.2, fig.height = 3}
+p1 <- plot_grid(
+    p_umap_M,
+    p_stackedbar_M +
+        theme(plot.margin = margin()),
+    ncol = 2,
+    rel_widths = c(7, 1),
+    align = "h",
+    axis = "tb"
+)
+p2 <- plot_grid(
+    p_label + 
+        geom_point(size = 10, color = "white") +
+        scale_y_discrete(position = "right") + 
+        theme(axis.text.y = element_text(hjust = 1)),
+    p_label + theme(axis.text.y = element_blank()), 
+    ncol = 2, 
+    rel_widths = c(7, 1)
+)
+plot_grid(p1, p2, ncol = 1, rel_heights = c(12, 1))
+```
+
+### Stacked bar prop with stats
+
+```{r}
+prop_m_df <- get_metadata_from_so(so_M) %>%
+  calculate_proportion(clusters_M, group) %>%
+  separate(
+    col = "group",
+    into = c("genotype", "treatment"),
+    sep = "__",
+    remove = FALSE
+  )
+```
+
+```{r}
+binom_prop_m_out <- prop_m_df %>% 
+  named_group_split(clusters_M, genotype) %>% 
+  map_dfr(~{
+    if (is.na(..1$total[[1]]) | is.na(..1$total[[2]]))
+      return(tibble(estimate = NA))
+    else 
+      broom::tidy(run_binom_on_tbl(..1))
+  }, .id = "cluster_genotype") %>% 
+  separate(cluster_genotype, into = c("clusters_M", "genotype"), sep = " / ") %>% 
+  mutate(p.adj = p.adjust(p.value, method = "BH")) %>% 
+  mutate_signif_levels(p.adj) %>% 
+  mutate(signif = ifelse(signif == "", "n.s.", signif))
+```
+
+```{r p_stackedbar_m, fig.height = 3, fig.width = 2}
+p_stackedbar_m <- prop_m_df %>% 
+  arrange(desc(clusters_M)) %>%
+  mutate(clusters_M = factor(clusters_M, levels = names(palette_cluster_M))) %>%
+  ggplot() +
+  aes(group, prop, fill = clusters_M) +
+  geom_col() +
+  geom_text(
+    aes(y = pos_y, label = paste0(str_extract(clusters_M, ".*:"), signif)),
+    data = ~ ..1 %>%
+      left_join(binom_prop_m_out, by = c("genotype", "clusters_M")) %>%
+      mutate(clusters_M = factor(clusters_M, levels = names(palette_cluster_M))) %>% 
+      filter(treatment == "CD40 agonist") %>% 
+      arrange(desc(clusters_M)) %>%
+      group_by(genotype) %>% 
+      mutate(cumsum_prop = cumsum(prop)) %>% 
+      mutate(pos_y = cumsum_prop - (prop / 2)), 
+    size = 1.5, 
+    vjust = 0.5
+  ) + 
+  facet_grid(~genotype, scale = "free_x") + 
+  scale_y_continuous(expand = c(0, 0)) +
+  remove_spines() +
+  scale_fill_manual(values = palette_cluster_M) +
+  theme(
+    axis.text.y = element_blank(),
+    axis.text.x = element_blank(),
+    axis.title = element_blank(),
+    legend.position = "none"
+  )
+p_stackedbar_m
+```
+
+## myeloid galaxy plots
+
+```{r, fig.width = 4, fig.height = 1.3}
+get_metadata_from_so(so_M) %>%
+    mutate(genotype = factor(genotype, levels = c("Ctrl", "B2m KO"))) %>% 
+    mutate(treatment = factor(treatment, levels = c("Isotype", "CD40 agonist"))) %>% 
+    ggplot() +
+    aes(umap_1, umap_2) +
+    stat_density_2d(aes(fill = ..density..),
+                    geom = "raster",
+                    contour = FALSE) +
+    geom_text(aes(label = paste0(genotype, "\n", treatment), 
+                  x = min(metadata_all$umap_1), y = min(metadata_all$umap_2)),
+              hjust = 0, vjust = 0, 
+              color = "white", 
+              size = 2, 
+              data = ~..1 %>% select(treatment, genotype) %>% unique()) + 
+    scale_x_continuous(expand = expansion(mult = 0.05)) +
+    scale_y_continuous(expand = expansion(mult = 0.05)) +
+    scale_fill_viridis(option = "magma",
+                       limits = c(0, 0.03),
+                       oob = scales::squish)+
+    facet_wrap( ~ genotype + treatment, scale = "free_y", ncol = 4) +
+    remove_spines() +
+    theme(
+        strip.background = element_blank(), 
+        strip.text = element_blank(), 
+        axis.text = element_blank(),
+        panel.spacing = unit(0, "pt"),
+        panel.background = element_rect(fill = "black"),
+        legend.text = element_text(angle = 45, hjust = 1, vjust = 1.3),
+        legend.title = element_blank(),
+        legend.position = c(0.91,-0.25),
+        legend.direction = "horizontal",
+        axis.title.x = element_text(vjust = 1), 
+        axis.title.y = element_text(vjust = 0)
+    ) + 
+    labs(x = "UMAP dim. 1", y = "UMAP dim. 2")
+```
+
+## Ifng response in myeloid compartment
+
+```{r, fig.width = 3, fig.height = 2.5}
+metadata_M_vision <- get_metadata_from_so(so_M) %>% 
+    left_join(vision_list$M, by = "cell") 
+avg_ifngr_df <- metadata_M_vision %>% 
+    group_by(clusters_M) %>% 
+    summarise(avg_ifng_response = median(HALLMARK_INTERFERON_GAMMA_RESPONSE)) %>% 
+    arrange(desc(avg_ifng_response))
+metadata_M_vision %>% 
+    mutate(clusters_M = factor(clusters_M, levels = avg_ifngr_df$clusters_M)) %>% 
+    ggplot() + 
+    aes(clusters_M, HALLMARK_INTERFERON_GAMMA_RESPONSE) + 
+    geom_violin(
+        aes(fill = clusters_M),
+        draw_quantiles = 0.5,
+        scale = "width",
+        size = 0.25
+    ) +
+    scale_fill_manual(values = palette_cluster_M) + 
+    remove_x_spine() + 
+    scale_y_continuous(expand = c(0, 0)) + 
+    theme(legend.position = "none", 
+          axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5)) + 
+    labs(x = "Clusters", y = "Ifng response score (VISION)")
+```
+
+### With T/NK cells too
+
+```{r, fig.width = 3, fig.height = 2.5}
+metadata_TNK_vision <- get_metadata_from_so(so_T) %>%
+  left_join(vision_list$Lexh, by = "cell")
+metadata_vision <- metadata_M_vision %>%
+  bind_rows(metadata_TNK_vision) %>% 
+  mutate(clusters = ifelse(is.na(clusters_M), as.character(clusters_T), as.character(clusters_M))) 
+avg_ifngr_df <- metadata_vision %>% 
+  group_by(clusters) %>%
+  summarise(avg_ifng_response = median(HALLMARK_INTERFERON_GAMMA_RESPONSE)) %>%
+  arrange(desc(avg_ifng_response))
+metadata_vision %>%
+  mutate(clusters = factor(clusters, levels = avg_ifngr_df$clusters)) %>%
+  ggplot() +
+  aes(clusters, HALLMARK_INTERFERON_GAMMA_RESPONSE) +
+  geom_violin(
+    aes(fill = clusters),
+    draw_quantiles = 0.5,
+    scale = "width",
+    size = 0.25
+  ) +
+  scale_fill_manual(values = c(palette_cluster_M, palette_cluster_T)) +
+  remove_x_spine() +
+  scale_y_continuous(expand = c(0, 0), limits = ~c(..1[1], ..1[2]*1.2)) +
+  theme(legend.position = "none",
+        axis.text.x = element_text(
+          angle = 90,
+          hjust = 1,
+          vjust = 0.5
+        )) +
+  labs(x = "Clusters", y = "Ifng response score (VISION)") + 
+  stat_compare_means(comparisons = list(c("7: inflammatory monocyte", "10: migratory DC")), 
+                     method = "t.test", 
+                     label = "p.signif", 
+                     size = 3)
+```
+
+## Influx of CD40 specific macs in B2m KO
+
+```{r myeloid prop_df}
+genotype_mouse_key <- get_metadata_from_so(so_M) %>% 
+    select(mouse, genotype, treatment) %>% 
+    unique()
+prop_df <- get_metadata_from_so(so_M) %>% 
+    calculate_proportion(clusters_M, mouse) %>% 
+    left_join(genotype_mouse_key, by = "mouse") %>% 
+    mutate(treatment = factor(treatment, levels = c("Isotype", "CD40 agonist"))) %>% 
+    mutate(percent = prop * 100) %>% 
+    fill(total, .direction = c("down")) %>% 
+    replace_na(replace = list(count = 0)) 
+```
+
+```{r myeloid glm_out_df}
+focus_cluster_str <- prop_df$clusters_M %>% unique() %>% str_subset("^7")
+
+glm_out_df <- prop_df %>%
+    filter(clusters_M == focus_cluster_str) %>% 
+    group_by(clusters_M, genotype) %>%
+    summarise(glm_out = broom::tidy(glm(prop ~ treatment, family = quasibinomial, weights = total))) %>%
+    unnest(glm_out)
+
+glm_treatment_df <- glm_out_df %>% 
+    filter(term == "treatmentCD40 agonist") %>% 
+    group_by(genotype) %>% 
+    mutate(p_BH = p.adjust(p.value, method = "BH")) %>% 
+    ungroup() %>% 
+    mutate(signif = case_when(
+        p_BH < 0.001 ~ "***", 
+        p_BH < 0.01 ~ "**", 
+        p_BH < 0.05 ~ "*", 
+        TRUE ~ ""
+    )) %>% 
+    relocate(signif, .after = clusters_M)
+```
+
+
+```{r, fig.width = 1.5, fig.height = 2}
+jitter_shape <- 21
+genotype_str <- "B2m KO" 
+prop_df %>%
+    filter(clusters_M == focus_cluster_str) %>% 
+    filter(genotype == genotype_str) %>%
+    ggplot() +
+    aes(treatment, percent, color = treatment) +
+    geom_col(
+        aes(fill = treatment, color = treatment),
+        width = 0.75,
+        alpha = 0.5,
+        data = ~ ..1 %>%
+            group_by(treatment, clusters_M) %>%
+            summarise(percent = mean(percent))
+    ) +
+    geom_jitter(
+        shape = jitter_shape,
+        fill = "white",
+        size = 2,
+        width = 0.2
+    ) +
+    geom_text(
+        aes(
+            x = 1.5,
+            y = percent + 7,
+            label = signif,
+            color = NA
+        ),
+        color = "black",
+        size = 3,
+        data = ~ ..1 %>%
+            group_by(clusters_M) %>%
+            filter(percent == max(percent)) %>%
+            ungroup() %>%
+            left_join(glm_treatment_df, by = c("clusters_M", "genotype")) %>%
+            filter(genotype == genotype_str)
+    ) +
+    geom_segment(
+        aes(
+            x = 1,
+            xend = 2,
+            y = percent + 5,
+            yend = percent + 5
+        ),
+        size = 0.5,
+        color = "black",
+        data = ~ ..1 %>%
+            group_by(clusters_M) %>%
+            filter(percent == max(percent)) %>%
+            ungroup() %>%
+            left_join(glm_treatment_df, by = c("clusters_M", "genotype")) %>%
+            filter(signif != "") %>%
+            filter(genotype == genotype_str)
+    ) +
+    facet_wrap( ~ clusters_M,
+                strip.position = "bottom",
+                ncol = 15) +
+    scale_y_continuous(expand = c(0, 0), limits = ~c(0, ..1[2]*1.05)) +
+    scale_fill_manual(values = palette_treatment) +
+    scale_color_manual(values = palette_treatment) +
+    scale_shape_manual(values = c(23, 21)) +
+    remove_x_spine() +
+    theme(
+        axis.text.x = element_blank(),
+        axis.title.x = element_blank(),
+        legend.position = c(0.4, 0.75),
+        legend.direction = "vertical",
+        legend.title = element_blank()
+        # strip.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5)
+    )  +
+    labs(y = "Freq. of immune cells (%)")
+```
+
+# Figure 5
+
+For the panels in figure 5, please see the earlier section labelled "Full TCGA Analysis" and "Compare Monocyte Signature to Others"
+
+# Supplementary scRNAseq figure
+
+## hto demux
+
+```{r, fig.width = 3.5, fig.height = 2}
+hto_df <- so@assays$HTO@data[,] %>% 
+    as.matrix() %>% 
+    t() %>% 
+    as_tibble(rownames = "cell")
+hto_plot_df <- metadata_all %>% 
+    left_join(hto_df, by = "cell") %>% 
+    group_by(orig.ident, hash.ID) %>% 
+    summarise(across(starts_with("hashtag"), mean)) %>% 
+    pivot_longer(cols = str_subset(colnames(.), "hashtag"), 
+                 names_to = "hashtag") %>% 
+    ungroup() %>% 
+    separate(orig.ident, into = c("sequencing", "sample"), extra = "merge", sep = "_") %>% 
+    mutate(sample = str_extract(sample, "sample_.")) 
+hto_plot_df %>% 
+    filter(!(sequencing == "seq2" & hashtag == "hashtag3")) %>% 
+    filter(!(hashtag == "hashtag3" & sample == "sample_c")) %>% 
+    filter(!(hashtag == "hashtag3" & sample == "sample_f")) %>% 
+    ggplot() + 
+    aes(hash.ID, hashtag, fill = value) + 
+    geom_tile(color = "black") + 
+    facet_grid(sequencing~sample) + 
+    coord_fixed() + 
+    labs(fill = "Mean expr.", x = "Identity", y = "Expression") + 
+    scale_fill_viridis(na.value = "white", option = "magma") + 
+    theme(axis.text.x = element_text(angle = 45, hjust = 1), 
+          axis.line = element_blank(), 
+          axis.ticks = element_blank())
+```
+
+## qc metrics
+
+```{r, fig.width = 3.5, fig.height = 2}
+metadata_all %>%
+    pivot_longer(cols = c(nFeature_RNA, nCount_RNA, percent.mt)) %>%
+    ggplot() +
+    aes(orig.ident,value) +
+    geom_violin(fill = "grey", scale = "width", size = 0.1) +
+    scale_y_continuous(expand = c(0, 0)) +
+    remove_x_spine() +
+    theme(
+        # axis.text.x = element_blank(),
+        axis.text.x = element_text(
+            angle = 90,
+            hjust = 1,
+            vjust = 0.5, 
+            size = 6, 
+        ),
+        legend.position = "none",
+        plot.title = element_text(hjust = 0.5)
+    ) + 
+    facet_wrap( ~ name, scale = "free_y", ncol = 3) 
+```
+
+
+## subsetting and doublet removal
+
+```{r p_umap_all_w_doublets, fig.width = 2, fig.height = 2}
+metadata_all %>%
+    plot_umap(
+        color_str = "general_cell_types",
+        pixels = c(2048, 2048),
+        pointsize = 2.1
+    ) +
+    geom_text_repel(
+        aes(label = general_cell_types),
+        data = ~..1 %>% 
+            group_by(general_cell_types) %>% 
+            summarise(UMAP_1 = mean(UMAP_1), 
+                      UMAP_2 = mean(UMAP_2)),
+        force = 5,
+        size = 2
+    ) + 
+    scale_y_continuous(expand = expansion(mult = 0.15)) +
+    annotate(
+        "text",
+        x = -Inf,
+        y = -Inf,
+        label = "Total cells = 99,337",
+        size = 2,
+        hjust = -0.05,
+        vjust = -0.5
+    ) + 
+    scale_color_manual(values = rev(social_palette)[c(8, 4, 5, 6, 3)]) +
+    theme(legend.position = "none")
+```
+
+
+## overview feature plots
+
+```{r, fig.width = 4, fig.height = 1.2}
+genes_to_show <- c("Ptprc", "Itgam", "Cd3e", "Mlana")
+gene_df <-
+  get_metadata_from_so(so,
+                       genes = genes_to_show,
+                       metadata = NULL,
+                       reduction = NULL)
+metadata_all %>%
+  left_join(gene_df, by = "cell") %>%
+  filter(from_subclusters != "doublets") %>%
+  pivot_longer(cols = genes_to_show) %>%
+  mutate(name = factor(name, levels = genes_to_show)) %>%
+  plot_umap(
+    pixels = c(1024, 1024),
+    pointsize = 2.1,
+    fix_coords = FALSE
+  ) +
+  geom_text(
+    aes(label = name, x = -Inf, y = -Inf),
+    hjust = -0.1,
+    vjust = -0.5,
+    data = ~ ..1 %>% select(name) %>% unique(),
+    size = 2.5,
+    fontface = "italic"
+  ) +
+  facet_wrap(~ name, ncol = 4, scale = "free_y") +
+  scale_x_continuous(expand = expansion(mult = .1)) +
+  scale_y_continuous(expand = expansion(mult = .1)) +
+  scale_color_viridis(option = "magma") +
+  theme(
+    panel.spacing = unit(0, "pt"),
+    strip.background = element_blank(),
+    strip.text = element_blank(),
+    legend.title = element_blank(),
+    legend.position = c(0.91,-0.2),
+    legend.direction = "horizontal",
+    aspect.ratio = diff(range(metadata_all$UMAP_2)) / diff(range(metadata_all$UMAP_1))
+  )
+```
+
+## B2m effect
+
+### GSEA summary
+
+```{r, fig.width = 4, fig.height = 2}
+gsea_out <- readRDS(file.path(results_dir, "gsea_pb_iso_macs_jablonski.rds"))
+gsea_out %>% 
+  as_tibble(rownames = "gs_name") %>% 
+  ggplot() + 
+  aes(fct_reorder(gs_name, sscore), sscore) + 
+  geom_point(aes(shape = q.val < 0.05)) + 
+  geom_segment(aes(xend = gs_name, y = 0, yend = sscore), size = 0.2) + 
+  coord_flip() + 
+  geom_hline(yintercept = 0, linetype = "dashed", size = 0.2) + 
+  scale_shape_manual(values = c(4, 19)) + 
+  remove_spines() + 
+  labs(x = "")
+```
+
+```{r}
+gsea_out %>% 
+  as_tibble(rownames = "gs_name") %>% 
+  filter(str_detect(gs_name, "Jablonski"))
+```
+
+## Markers
+
+### T cells
+
+```{r, fig.width = 6, fig.height = 2.5}
+genes <- c(
+    "Cd44", # 11/8 meeting with Brian, he suggested adding it
+    "Cd4", "Cxcr6", "Icos", # Cd4
+    "Cd8a", "Cd3e", #"Ccl5", # Ccl5-high
+    "Gzmk", "Tox", # Gzmk high
+    "Pdcd1", "Havcr2", "Lag3", # Exh
+    "Il1rl1", "Gata3", # ILC2 
+    "Trdc", # gdT
+    "Ifit1", "Isg15", # IFN-sensing
+    "Sell", "Il7r", "Tcf7", # Naive
+    "Klra4", "Klre1", # NK
+    "Mki67", "Stmn1",  # Prolif
+    "Ikzf2", "Foxp3", "Ctla4" # tregs
+)
+
+dotplot_df <-
+    get_metadata_from_so(so_T,
+                         metadata = "clusters_T",
+                         genes = genes,
+                         reduction = NULL) %>%
+    pivot_longer(cols = 3:ncol(.),
+                 names_to = "gene",
+                 values_to = "expr") %>%
+    mutate(clusters_T = factor(clusters_T, levels = rev(names(palette_cluster_T)))) %>% 
+    mutate(gene = factor(gene, levels = genes)) %>% 
+    group_by(gene) %>%
+    mutate(scaled_expr = as.vector(scale(expr))) %>%
+    group_by(clusters_T, gene) %>%
+    summarise(mean_scaled_expr = mean(expr), 
+              pct_expr = sum(expr > 0) / n()) %>%
+    mutate(
+        color = palette_cluster_T[as.character(clusters_T)], 
+        name = glue::glue("<i style='color:{color}'>{clusters_T}</i>")
+    ) %>% 
+    mutate(name = fct_reorder(name, as.integer(clusters_T)))
+dotplot_df %>%
+  ggplot() +
+  aes(gene, name) +
+  geom_point(aes(size = pct_expr, color = mean_scaled_expr)) +
+  scale_size(range = c(0, 4.5)) +
+  scale_color_viridis(limits = c(NA, 3), oob = scales::squish, option = "magma") +
+  remove_spines() +
+  theme(
+    panel.background = element_rect(color = "black"),
+    axis.title = element_blank(),
+    axis.text.x = element_text(
+      angle = 90,
+      hjust = 1,
+      vjust = 0.5
+    ),
+    axis.text.y = ggtext::element_markdown()
+  )
+```
+
+### Myeloid
+
+
+```{r, fig.width = 6, fig.height = 3}
+genes <- c(
+    "Cd209a", "H2-Ab1", # Monocytic DCs
+    "Irf8", "Itgax", "Sirpa", "Flt3", "Xcr1", # DCs
+    "Ccr7", "Fscn1", # Migratory DCs
+    "Siglech", # pDCs 
+    "Mki67", "Stmn1", # Proliferating
+    "Wfdc17", # M2a macs
+    "Adgre1", "Ccl12", "C1qa", "C1qb", # M1 macs
+    "Ly6i", "Ctsk", # unknown mac markers
+    "Mmp12", "Arg1", # MDSC
+    "Chil3", "Il1b", # Monocyte/Neuts
+    "Ace", # Ace-high monocytes
+    "S100a9", "S100a8" # Neutrophils
+)
+
+dotplot_df <-
+    get_metadata_from_so(so_M,
+                         metadata = "clusters_M",
+                         genes = genes,
+                         reduction = NULL) %>%
+    pivot_longer(cols = 3:ncol(.),
+                 names_to = "gene",
+                 values_to = "expr") %>%
+    mutate(clusters_M = factor(clusters_M, levels = rev(names(palette_cluster_M)))) %>% 
+    mutate(gene = factor(gene, levels = genes)) %>% 
+    group_by(gene) %>%
+    mutate(scaled_expr = as.vector(scale(expr))) %>%
+    group_by(clusters_M, gene) %>%
+    summarise(mean_scaled_expr = mean(expr), 
+              pct_expression = sum(expr > 0) / n()) %>%
+    mutate(
+        color = palette_cluster_M[as.character(clusters_M)], 
+        name = glue::glue("<i style='color:{color}'>{clusters_M}</i>")
+    ) %>% 
+    mutate(name = fct_reorder(name, as.integer(clusters_M)))
+dotplot_df %>%
+  ggplot() +
+  aes(gene, name) +
+  geom_point(aes(size = pct_expression, color = mean_scaled_expr)) +
+  scale_color_viridis(limits = c(NA, 3) , oob = scales::squish, option = "magma") +
+  scale_size(range = c(0, 4.5)) +
+  remove_spines() +
+  theme(
+    panel.background = element_rect(color = "black"),
+    axis.title = element_blank(),
+    axis.text.x = element_text(
+      angle = 90,
+      hjust = 1,
+      vjust = 0.5
+    ),
+    axis.text.y = ggtext::element_markdown()
+  )
+```
+
+
+### gsea curve
+
+```{r, fig.width = 2, fig.height = 1.5}
+dge_b2m_cd40.v.isotype_df <- read_tsv(
+    file.path(results_dir, "dge_pb_b2m_all_cd40.v.iso.tsv")
+) %>% 
+    mutate(signed_p = ifelse(log2FoldChange < 0, -log10(pvalue + 1e-100), log10(pvalue + 1e-100))) %>% 
+    arrange(desc(signed_p), desc(log2FoldChange)) %>%
+    mutate(rank = row_number())
+ifng_all_leg <-
+    Rsc::get_leading_edge_df(
+        set_names(
+            dge_b2m_cd40.v.isotype_df$signed_p,
+            dge_b2m_cd40.v.isotype_df$gene
+        ),
+        ifng_response_genes
+    ) 
+p_curve <- ifng_all_leg %>% 
+    ggplot() + 
+    aes(rank, running_es) + 
+    geom_hline(yintercept = 0, linetype = "dashed", size = 0.2) + 
+    geom_line(size = 0.2) + 
+    scale_y_continuous(limits = ~c(..1[1]*1.4, ..1[2])) + 
+    remove_x_spine() + 
+    theme(legend.position = c(0.5, 0.1), 
+          legend.title = element_blank(), 
+          axis.text.x = element_blank(), 
+          axis.title.x = element_blank(), 
+          plot.margin = margin(8, 8, 0, 8), 
+          plot.title = element_text(size = 8, hjust = 0.5), 
+          plot.subtitle = element_text(size = 6, hjust = 0.5)) + 
+    labs(y = "Enrichment score", 
+         title = "Hallmark IFNg response", 
+         subtitle = "CD40 agonist vs Isotype") + 
+  annotate("text", x = 2500, y = .1, label = "FDR < 0.001", size = 2)
+p_ticks <- ifng_all_leg %>% 
+    filter(in_gs) %>% 
+    ggplot() + 
+    geom_point(aes(x = rank, y = 1), size = 0, color = "white") + 
+    geom_segment(aes(x = rank, xend = rank, y = -Inf, yend = Inf), 
+                 size = 0.1) + 
+    remove_spines() + 
+    theme(axis.text.y = element_blank(), 
+          axis.title.y = element_blank(), 
+          legend.position = "none", 
+          plot.margin = margin())
+plot_grid(p_curve, p_ticks, ncol = 1, align = "v", axis = "lr", rel_heights = c(3, 1))
+```
+
+# Extra figures
+
+## CD8 difference in B2m KO
+
+```{r}
+key_mouse_df <- metadata_all %>% 
+    select(mouse, genotype, treatment) %>% 
+    unique()
+metadata_all %>%
+    filter(from_subclusters != "doublets") %>%
+    calculate_proportion(clusters, mouse) %>%
+    left_join(key_mouse_df, by = "mouse") %>% 
+    filter(str_detect(clusters, "^0|^7")) %>%
+    group_by(treatment, clusters) %>%
+    summarise(out = broom::tidy(glm(
+        prop ~ genotype, family = quasibinomial, weights = total
+    ))) %>%
+    unnest(out) %>% 
+    mutate_signif_levels(p.value)
+```
+
+```{r, fig.width = 4, fig.height = 3}
+metadata_all %>%
+    filter(from_subclusters != "doublets") %>%
+    calculate_proportion(clusters, mouse) %>%
+    left_join(key_mouse_df, by = "mouse") %>% 
+    filter(str_detect(clusters, "^0|^7")) %>% 
+    filter(treatment == "Isotype") %>% 
+    mutate(mouse = str_sub(mouse, start = 8)) %>% 
+    ggplot() + 
+    aes(genotype, prop) + 
+    geom_point() + 
+    geom_text(aes(label = mouse), hjust = 1.1, size = 1.5) + 
+    scale_y_continuous(limits = ~c(0, ..1[2]*1.1)) + 
+    facet_grid(~clusters) +
+    stat_compare_means(size = 2) 
+```
+
+
+## Dotplot with markers
+
+```{r, fig.width = 4, fig.height = 1.3}
+genes <- c("Mlana", "Ptprc", "Cd3e", "Klrd1", "Irf8", "Itgam")
+
+dotplot_df <-
+    metadata_all %>%
+    filter(from_subclusters != "doublets") %>% 
+    left_join(get_metadata_from_so(so, genes = genes, metadata = NULL, reduction = NULL), 
+              by = "cell") %>% 
+    pivot_longer(cols = all_of(genes),
+                 names_to = "gene",
+                 values_to = "expr") %>%
+    mutate(clusters = factor(clusters, levels = rev(cluster_ID_name_ordered))) %>% 
+    mutate(gene = factor(gene, levels = rev(genes))) %>% 
+    group_by(gene) %>%
+    mutate(scaled_expr = as.vector(scale(expr))) %>%
+    group_by(clusters, gene) %>%
+    summarise(mean_scaled_expr = mean(expr), 
+              pct_expression = sum(expr > 0) / n()) %>%
+    mutate(
+        color = palette_cluster[as.character(clusters)], 
+        # name = glue::glue("<i style='color:{color}'>{clusters}</i>")
+        name = glue::glue("<b style='color:{color}'>{str_extract(clusters, '[:digit:]*')}</b>")
+    ) %>% 
+    mutate(name = fct_reorder(name, as.integer(clusters)))
+dotplot_df %>% 
+    ggplot() +
+    aes(name, gene) +
+    geom_point(aes(size = pct_expression, color = mean_scaled_expr)) + 
+    scale_color_viridis(limits = c(NA, 3) ,oob = scales::squish, option = "magma") + 
+    scale_size(range = c(0, 4)) + 
+    remove_spines() + 
+    theme(panel.background = element_rect(color = "black"), 
+          axis.title = element_blank(), 
+          legend.position = "none", 
+          axis.text.y = element_text(angle = 0, hjust = 1, vjust = 0.5), 
+          axis.text.x = ggtext::element_markdown(angle = 0, hjust = 0.5))
+```

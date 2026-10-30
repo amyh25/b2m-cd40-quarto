@@ -1,0 +1,76 @@
+---
+execute: 
+  freeze: true
+  message: false
+  warning: false
+---
+
+```{r}
+library(here)
+source(here("lib", "setup.R"))
+source(here("lib", "helper_Seurat.R"))
+source(here("lib", "helper.R"))
+source(here("lib", "aesthetics.R"))
+library(VISION)
+
+vision_dir <- file.path(results_dir, "vision_out")
+if (!dir.exists(vision_dir)) dir.create(vision_dir)
+```
+
+```{r}
+exh_signature_path <- here("data", "signatures", "exhaustion_sigs.gmt")
+h_signature_path <- here("data", "signatures", "h_mouse.gmt")
+```
+
+## Score M
+
+```{r}
+vo_M_sig_scores_df <- run_or_readRDS(
+  file.path(results_dir, "vision_out", "vo_filterRNA200mito10_subsetMremovedoublets_sigscores.rds"), 
+  function() {
+    so_M <- readRDS(file.path(results_dir, "so_filterRNA200mito10_subsetMremovedoublets.rds"))
+    vo_M <- Vision(so_M, signatures = h_signature_path)
+    vo_M <- analyze(vo_M)
+    return(as_tibble(vo_M@SigScores, rownames = "cell"))
+  }
+)
+```
+
+# Score T/NK
+
+```{r}
+vo_T_sig_scores_df <- run_or_readRDS(
+  file.path(results_dir, "vision_out", "vo_filterRNA200mito10_subsetT_sigscores.rds"), 
+  function() {
+    so_T <- readRDS(file.path(results_dir, "so_filterRNA200mito10_subsetT.rds"))
+    vo_T <- Vision(so_T, signatures = h_signature_path)
+    vo_T <- analyze(vo_T)
+    return(as_tibble(vo_T@SigScores, rownames = "cell"))
+  }
+)
+
+vo_T_exh_sig_scores_df <- run_or_readRDS(
+  file.path(results_dir, "vision_out", "vo_filterRNA200mito10_subsetT_exh_sigscores.rds"), 
+  function() {
+    so_T <- readRDS(file.path(results_dir, "so_filterRNA200mito10_subsetT.rds"))
+    vo_T <- Vision(so_T, signatures = exh_signature_path)
+    vo_T <- analyze(vo_T)
+    return(as_tibble(vo_T@SigScores, rownames = "cell"))
+  }
+)
+```
+
+# Score all
+
+```{r}
+vo_sig_scores_df <- run_or_readRDS(
+  file.path(results_dir, "vision_out", "vo_filterRNA200mito10_sigscores.rds"), 
+  function() {
+    so <- readRDS(file.path(results_dir, "so_filterRNA200mito10.rds"))
+    vo <- Vision(so, signatures = h_signature_path)
+    vo <- analyze(vo)
+    return(as_tibble(vo@SigScores, rownames = "cell"))
+  }
+)
+```
+
